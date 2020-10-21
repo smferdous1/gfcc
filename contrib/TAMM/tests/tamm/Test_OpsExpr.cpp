@@ -1,6 +1,5 @@
-#define CATCH_CONFIG_RUNNER
-
-#include "catch/catch.hpp"
+#define DOCTEST_CONFIG_IMPLEMENT
+#include "doctest/doctest.h"
 #include "ga-mpi.h"
 #include "ga.h"
 #include "macdecls.h"
@@ -168,39 +167,39 @@ TEST_CASE("Two-dimensional tensor") {
     // invalid operations: should fail
 
     // invalid number of labels
-    // try {
-    //     T1(i) = double{8};
-    // } catch(...) { failed = true; }
-    // REQUIRE(failed);
-    // failed = false;
+    try {
+        T1(i) = double{8};
+    } catch(...) { failed = true; }
+    REQUIRE(failed);
+    failed = false;
 
     // invalid number of labels
-    // try {
-    //     T1("x") = double{8};
-    // } catch(...) { failed = true; }
-    // REQUIRE(failed);
-    // failed = false;
+    try {
+        T1("x") = double{8};
+    } catch(...) { failed = true; }
+    REQUIRE(failed);
+    failed = false;
 
-    // // invalid labels
-    // try {
-    //     T1(i, i(j)) = double{8};
-    // } catch(...) { failed = true; }
-    // REQUIRE(!failed);
-    // failed = false;
+    // invalid labels
+    try {
+        T1(i, i(j)) = double{8};
+    } catch(...) { failed = true; }
+    REQUIRE(!failed);
+    failed = false;
 
-    // // invalid labels
-    // try {
-    //     T1(i, j(i)) = double{8};
-    // } catch(...) { failed = true; }
-    // REQUIRE(!failed);
-    // failed = false;
+    // invalid labels
+    try {
+        T1(i, j(i)) = double{8};
+    } catch(...) { failed = true; }
+    REQUIRE(!failed);
+    failed = false;
 
-    // // invalid number of labels
-    // try {
-    //     T1(i, j, "x") = double{8};
-    // } catch(...) { failed = true; }
-    // REQUIRE(failed);
-    // failed = false;
+    // invalid number of labels
+    try {
+        T1(i, j, "x") = double{8};
+    } catch(...) { failed = true; }
+    REQUIRE(failed);
+    failed = false;
 }
 
 TEST_CASE("SCF Commutator declarations") {
@@ -662,11 +661,14 @@ TEST_CASE("Tensor operations on named subspaces") {
 
 #endif
 
+
 int main(int argc, char* argv[]) {
 
     tamm::initialize(argc, argv);
 
-    int res = Catch::Session().run(argc, argv);
+    doctest::Context context(argc, argv);
+
+    int res = context.run();
 
     tamm::finalize();
 
