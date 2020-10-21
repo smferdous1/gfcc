@@ -1,5 +1,5 @@
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include "doctest/doctest.h"
+#define CATCH_CONFIG_MAIN
+#include <catch/catch.hpp>
 
 #include <tamm/index_space.hpp>
 #include <tamm/tiled_index_space.hpp>
@@ -344,4 +344,3 @@ TEST_CASE(
                              /*reference space*/ AO,
                              /*relation*/ ao_atom_relation});
 }
-

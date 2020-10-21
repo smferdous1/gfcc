@@ -89,11 +89,6 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
     const bool is_uhf = (sys_data.scf_type == sys_data.SCFType::uhf);
     // const bool is_rohf = (sys_data.scf_type == sys_data.SCFType::rohf);    
 
-    std::string out_fp = options_map.options.output_file_prefix+"."+scf_options.basis;
-    std::string files_dir = out_fp+"_files/scf";
-    std::string files_prefix = /*out_fp;*/ files_dir+"/"+out_fp;
-    if(!fs::exists(files_dir)) fs::create_directories(files_dir);
-
     #if SCF_THROTTLE_RESOURCES
       auto [hf_nnodes,ppn,hf_nranks] = get_hf_nranks(N);
       if (scf_options.nnodes > hf_nnodes) {
@@ -164,13 +159,6 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
                   << endl;
       }
       #endif
-
-      ndf = dfbs.nbf();
-      dfAO = IndexSpace{range(0, ndf)};
-      std::tie(df_shell_tile_map, dfAO_tiles, dfAO_opttiles) = compute_AO_tiles(exc,sys_data,dfbs);
-    
-      tdfAO=TiledIndexSpace{dfAO, dfAO_opttiles};
-      tdfAOt=TiledIndexSpace{dfAO, dfAO_tiles};
       
     }
     std::unique_ptr<DFFockEngine> dffockengine(
@@ -197,8 +185,8 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
 
     EigenTensors etensors;
 
-    std::string scf_files_prefix_a = files_prefix + ".alpha";
-    std::string scf_files_prefix_b = files_prefix + ".beta";
+    std::string scf_files_prefix_a = options_map.options.output_file_prefix + "." + scf_options.basis + ".alpha";
+    std::string scf_files_prefix_b = options_map.options.output_file_prefix + "." + scf_options.basis + ".beta";
 
     const bool scf_conv = restart && scf_options.noscf; 
     const int  max_hist = sys_data.options_map.scf_options.diis_hist; 
@@ -234,7 +222,7 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
 
     }
 
-    scf_restart_test(exc, sys_data, filename, restart, files_prefix);
+    scf_restart_test(exc, sys_data, filename, restart);
     
     #if SCF_THROTTLE_RESOURCES
     if (rank < hf_nranks) {
@@ -367,7 +355,7 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
       Scheduler sch{ec};
 
       if (restart) {
-        scf_restart(ec, sys_data, filename, etensors, files_prefix);
+        scf_restart(ec, sys_data, filename, etensors);
         if(is_rhf) 
           etensors.X      = etensors.C;
         if(is_uhf) {
@@ -452,13 +440,18 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
       std::tie(dCocc_til) = tdfCocc.labels<1>("all");
 
       if(do_density_fitting){
+        ndf = dfbs.nbf();
+        dfAO = IndexSpace{range(0, ndf)};
+        std::tie(df_shell_tile_map, dfAO_tiles, dfAO_opttiles) = compute_AO_tiles(ec,sys_data,dfbs);
+      
+        tdfAO=TiledIndexSpace{dfAO, dfAO_opttiles};
+        tdfAOt=TiledIndexSpace{dfAO, dfAO_tiles};
         std::tie(d_mu, d_nu, d_ku) = tdfAO.labels<3>("all");
         std::tie(d_mup, d_nup, d_kup) = tdfAOt.labels<3>("all");
-
-        ttensors.Zxy_tamm = Tensor<TensorType>{tdfAO, tAO, tAO}; //ndf,n,n
+    
         ttensors.xyK_tamm = Tensor<TensorType>{tAO, tAO, tdfAO}; //n,n,ndf
         ttensors.C_occ_tamm = Tensor<TensorType>{tAO,tdfCocc}; //n,nocc
-        Tensor<TensorType>::allocate(&ec, ttensors.xyK_tamm, ttensors.C_occ_tamm,ttensors.Zxy_tamm);
+        Tensor<TensorType>::allocate(&ec, ttensors.xyK_tamm, ttensors.C_occ_tamm);
       }//df basis
 
       if(rank == 0) {
@@ -662,7 +655,7 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
 
       if(rank == 0) tamm_to_eigen_tensor(ttensors.F1,etensors.F);
 
-      if(do_density_fitting) Tensor<TensorType>::deallocate(ttensors.xyK_tamm, ttensors.C_occ_tamm, ttensors.Zxy_tamm);
+      if(do_density_fitting) Tensor<TensorType>::deallocate(ttensors.xyK_tamm, ttensors.C_occ_tamm);
 
       Tensor<TensorType>::deallocate(ttensors.H1     , ttensors.S1      , ttensors.T1         , ttensors.V1,
                                      ttensors.F1tmp1 , ttensors.ehf_tmp , ttensors.ehf_tamm   , ttensors.F1,
@@ -748,5 +741,7 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
     return std::make_tuple(sys_data, ehf, shells, shell_tile_map, 
       C_alpha_tamm, F_alpha_tamm, C_beta_tamm, F_beta_tamm, tAO, tAOt, scf_conv);
 }
+
+
 
 #endif // TAMM_METHODS_HF_TAMM_HPP_

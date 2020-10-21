@@ -14,7 +14,6 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
     option_w_default(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     option_w_default(BLAS_INT4 ON)
-    option_w_default(BLAS_VENDOR ReferenceBLAS)
     option_w_default(ENABLE_COVERAGE OFF)
     option_w_default(CMAKE_CXX_EXTENSIONS OFF)
     option_w_default(CMAKE_BUILD_TYPE Release)
@@ -28,16 +27,7 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         if(NOT "${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Darwin")
             get_filename_component(__NWX_GCC_INSTALL_PREFIX "${CMAKE_Fortran_COMPILER}/../.." ABSOLUTE)
-            if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
-                set(NWX_GCC_TOOLCHAIN_FLAG "--gcc-toolchain=${__NWX_GCC_INSTALL_PREFIX}")
-            else()
-                if(GCCROOT)
-                    set(NWX_GCC_TOOLCHAIN_FLAG "--gcc-toolchain=${GCCROOT}")
-                else()
-                    message(FATAL_ERROR "GCCROOT variable not set when using clang compilers. \
-                        The GCCROOT path can be found using the command: \"which gcc\" ")
-                endif()
-            endif()
+            set(NWX_GCC_TOOLCHAIN_FLAG "--gcc-toolchain=${__NWX_GCC_INSTALL_PREFIX}")
             message(STATUS "NWX_GCC_TOOLCHAIN_FLAG: ${NWX_GCC_TOOLCHAIN_FLAG}")
         endif()
     endif()
@@ -88,8 +78,7 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
         option_w_default(${__project}_DEPENDENCIES "")
     endforeach()
 
-    set(SUPER_PROJECT_BINARY_DIR ${CMAKE_BINARY_DIR})
-    set(NWX_CORE_OPTIONS CMAKE_CXX_COMPILER CMAKE_C_COMPILER SUPER_PROJECT_BINARY_DIR
+    set(NWX_CORE_OPTIONS CMAKE_CXX_COMPILER CMAKE_C_COMPILER
         CMAKE_Fortran_COMPILER CMAKE_BUILD_TYPE BUILD_SHARED_LIBS ${NWX_CXX_FLAGS}
         CMAKE_INSTALL_PREFIX CMAKE_CXX_STANDARD CMAKE_VERSION PROJECT_VERSION
         CMAKE_POSITION_INDEPENDENT_CODE CMAKE_VERBOSE_MAKEFILE CMAKE_CXX_EXTENSIONS
@@ -108,8 +97,29 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
         bundle_cmake_args(DEPENDENCY_CMAKE_OPTIONS USE_SCALAPACK)
         set(TAMM_CXX_FLAGS "${TAMM_CXX_FLAGS} -DSCALAPACK")
     endif()
+
+    string(FIND "${LAPACKE_LIBRARIES}" "mkl" FINDLAPACKE_mkl_found)
+    string(FIND "${LAPACKE_LIBRARIES}" "essl" FINDLAPACKE_essl_found)
+
+    #TODO: Check if we are using 4-byte int libs when using ScaLAPACK
+    if(NOT "${FINDLAPACKE_mkl_found}" STREQUAL "-1")
+        string(FIND "${LAPACKE_LIBRARIES}" "ilp64" _mkl_ilp64_found)
+        if(NOT "${_mkl_ilp64_found}" STREQUAL "-1")
+            message(STATUS "DETECTED INTEL MKL ILP64 LIBS")
+            set(BLAS_INT4 OFF CACHE BOOL "BLAS INT SIZE" FORCE)
+            set(TAMM_CXX_FLAGS "${TAMM_CXX_FLAGS} -m64 -DMKL_ILP64" CACHE STRING "TAMM_CXX_FLAGS" FORCE)
+        endif()              
+    elseif(NOT "${FINDLAPACKE_essl_found}" STREQUAL "-1")
+        string(FIND "${LAPACKE_LIBRARIES}" "essl6464" _essl_ilp64_found)
+        string(FIND "${LAPACKE_LIBRARIES}" "esslsmp6464" _esslsmp_ilp64_found)
+        if(NOT "${_essl_ilp64_found}" STREQUAL "-1" OR NOT "${_esslsmp_ilp64_found}" STREQUAL "-1")
+            message(STATUS "DETECTED IBM ESSL ILP64 LIBS")
+            set(BLAS_INT4 OFF CACHE BOOL "BLAS INT SIZE" FORCE)
+            set(TAMM_CXX_FLAGS "${TAMM_CXX_FLAGS} -m64 -DLAPACK_ILP64" CACHE STRING "TAMM_CXX_FLAGS" FORCE)
+        endif()            
+    endif()
     
-    bundle_cmake_args(DEPENDENCY_CMAKE_OPTIONS BLAS_INT4 BLAS_VENDOR ENABLE_COVERAGE)
+    bundle_cmake_args(DEPENDENCY_CMAKE_OPTIONS BLAS_INT4 ENABLE_COVERAGE)
 
     print_banner("Locating Dependencies and Creating Targets")
     ################################################################################
@@ -117,13 +127,6 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
     # Add the subprojects, their dependencies, and their tests
     #
     ################################################################################
-
-    if(${BLAS_VENDOR} STREQUAL "ReferenceBLAS")
-        list(APPEND TAMM_EXTRA_LIBS -ldl)
-    endif()
-
-    bundle_cmake_strings(CORE_CMAKE_STRINGS BLAS_VENDOR)
-    set(DEPENDENCY_ROOT_DIRS)
 
     foreach(__project ${NWX_PROJECTS})
         foreach(depend ${${__project}_DEPENDENCIES})
@@ -136,10 +139,6 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
                 package_dependency(${depend} DEPENDENCY_PATHS)
             endif()
 
-            is_valid(${depend}_ROOT __deproot_set)
-            if(__deproot_set)
-                bundle_cmake_args(DEPENDENCY_ROOT_DIRS ${depend}_ROOT)
-            endif()
         endforeach()
 
         if(ENABLE_COVERAGE)
@@ -155,25 +154,25 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
             # if(USE_OPENMP)
             #     message(FATAL_ERROR "DPCPP build requires USE_OPENMP=OFF")
             # endif()
-            set(TAMM_CXX_FLAGS "${TAMM_CXX_FLAGS} -DUSE_DPCPP") #-fsycl
+            set(TAMM_CXX_FLAGS "${TAMM_CXX_FLAGS} -DUSE_DPCPP -fsycl")
         endif()      
 
         set(${NWX_CXX_FLAGS} "${${NWX_CXX_FLAGS}} ${TAMM_CXX_FLAGS}")
         bundle_cmake_strings(CORE_CMAKE_STRINGS ${NWX_CXX_FLAGS})
 
-        # if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        #     find_library(stdfs_LIBRARY 
-        #         NAMES c++fs 
-        #         PATHS ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES} 
-        #         DOC "LIBC++ FS Library" 
-        #     )
-        # else()
-        find_library(stdfs_LIBRARY 
-            NAMES stdc++fs 
-            PATHS ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES} 
-            DOC "GNU FS Library" 
-        )
-        # endif()
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            find_library(stdfs_LIBRARY 
+                NAMES c++fs 
+                PATHS ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES} 
+                DOC "LIBC++ FS Library" 
+            )
+        else()
+            find_library(stdfs_LIBRARY 
+                NAMES stdc++fs 
+                PATHS ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES} 
+                DOC "GNU FS Library" 
+            )
+        endif()
         message(STATUS "STDFS LIB: ${stdfs_LIBRARY}")
         if(stdfs_LIBRARY)
             list(APPEND TAMM_EXTRA_LIBS ${stdfs_LIBRARY})
@@ -185,9 +184,9 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
         endif()
 
         if(USE_CUDA)
-            # if(NOT USE_OPENMP)
-            #     message(FATAL_ERROR "CUDA build requires USE_OPENMP=ON")
-            # endif()
+            if(NOT USE_OPENMP)
+                message(FATAL_ERROR "CUDA build requires USE_OPENMP=ON")
+            endif()
             bundle_cmake_strings(CORE_CMAKE_STRINGS USE_CUDA NV_GPU_ARCH CUDA_MAXREGCOUNT)
             if(USE_CUTENSOR)
                 bundle_cmake_strings(CORE_CMAKE_STRINGS USE_CUTENSOR)
@@ -220,9 +219,7 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
                 SOURCE_DIR ${${__project}_SRC_DIR}
                 CMAKE_ARGS -DNWX_DEBUG_CMAKE=${NWX_DEBUG_CMAKE}
                            -DNWX_INCLUDE_DIR=${${__project}_INCLUDE_DIR}
-                           -DSTAGE_DIR=${STAGE_DIR}
                            ${CORE_CMAKE_OPTIONS}
-                           ${DEPENDENCY_ROOT_DIRS}
                 BUILD_ALWAYS 1
                 INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} install DESTDIR=${STAGE_DIR}
                 CMAKE_CACHE_ARGS ${CORE_CMAKE_LISTS}
@@ -241,7 +238,6 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
                     SOURCE_DIR ${${__project}_TEST_DIR}
                     CMAKE_ARGS -DSUPER_PROJECT_ROOT=${SUPER_PROJECT_ROOT}
                                -DNWX_DEBUG_CMAKE=${NWX_DEBUG_CMAKE}
-                               -DSTAGE_DIR=${STAGE_DIR}
                                -DSTAGE_INSTALL_DIR=${STAGE_INSTALL_DIR}
                                ${CORE_CMAKE_OPTIONS}
 
@@ -265,9 +261,7 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
             ExternalProject_Add(${__project}_Methods_External
                     SOURCE_DIR ${${__project}_METHODS_DIR}
                     CMAKE_ARGS -DSUPER_PROJECT_ROOT=${SUPER_PROJECT_ROOT}
-                               -DSUPER_PROJECT_BINARY_DIR=${SUPER_PROJECT_BINARY_DIR}
                                -DNWX_DEBUG_CMAKE=${NWX_DEBUG_CMAKE}
-                               -DSTAGE_DIR=${STAGE_DIR}
                                -DSTAGE_INSTALL_DIR=${STAGE_INSTALL_DIR}
                                ${CORE_CMAKE_OPTIONS}
 
@@ -293,8 +287,8 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
             DESTINATION ${CMAKE_INSTALL_PREFIX} USE_SOURCE_PERMISSIONS)
 
     if(${PROJECT_NAME} STREQUAL "tamm")
-        if(TARGET Libint2::libint2_cxx)
-            get_target_property(LI_CD Libint2::libint2_cxx INTERFACE_COMPILE_DEFINITIONS)
+        if(TARGET Libint2::cxx)
+            get_target_property(LI_CD Libint2::cxx INTERFACE_COMPILE_DEFINITIONS)
             string(REPLACE "=" " " LI_CD ${LI_CD})
             separate_arguments(LI_CD UNIX_COMMAND ${LI_CD})
             list (GET LI_CD 1 LI_BASIS_SET_PATH)

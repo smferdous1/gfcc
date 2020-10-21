@@ -5,14 +5,8 @@ cmake_minimum_required(VERSION ${CMAKE_VERSION})
 project(LAPACK VERSION 3.8.0 LANGUAGES C Fortran)
 include(DependencyMacros)
 include(ExternalProject)
-
-if( BLAS_LIBRARIES )
-  set( blas_LIBRARIES ${BLAS_LIBRARIES} )
-endif()
 find_dependency(BLAS)
 package_dependency(BLAS DEPENDENCY_PATHS)
-
-
 set(LAPACK_VERSION 3.8.0)
 set(LAPACK_URL http://www.netlib.org/lapack/lapack-${LAPACK_VERSION}.tar.gz)
 set(LAPACK_MD5 96591AFFDBF58C450D45C1DAA540DBD2)
@@ -24,7 +18,7 @@ if(CMAKE_POSITION_INDEPENDENT_CODE)
 endif()
 
 set(STAGE_DIR ${CMAKE_BINARY_DIR}/stage)
-ExternalProject_Add(LAPACK_External
+ExternalProject_Add(LAPACK
         DOWNLOAD_NO_PROGRESS TRUE
         URL ${LAPACK_URL}
         URL_MD5 ${LAPACK_MD5}
@@ -37,9 +31,9 @@ ExternalProject_Add(LAPACK_External
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                    -DCMAKE_Fortran_FLAGS=${LAPACK_FLAGS}
                    -DLAPACKE=OFF
-                   -DCMAKE_INSTALL_PREFIX=${STAGE_DIR}${CMAKE_INSTALL_PREFIX}
-        #MAKE_COMMAND $(MAKE)
-        INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} install DESTDIR=${STAGE_DIR}${CMAKE_INSTALL_PREFIX}
+                   -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+        MAKE_COMMAND $(MAKE)
+        INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} install DESTDIR=${STAGE_DIR}
         CMAKE_CACHE_ARGS ${DEPENDENCY_PATHS}
 )
 

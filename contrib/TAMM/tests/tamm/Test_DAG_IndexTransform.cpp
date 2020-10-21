@@ -1,5 +1,5 @@
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include "doctest/doctest.h"
+#define CATCH_CONFIG_MAIN
+#include <catch/catch.hpp>
 #include <tamm/tamm.hpp>
 
 using namespace tamm;

@@ -377,17 +377,17 @@ public:
                         << std::endl;
                 }
                 std::cout << ";" << "SUM" << ";;;;" 
-                << (std::accumulate(global_op_times_sum.begin(), global_op_times_sum.end(),
-                        decltype(global_op_times_sum)::value_type(0))) / np
+                << std::accumulate(global_op_times_sum.begin(), global_op_times_sum.end(),
+                        decltype(global_op_times_sum)::value_type(0))
                 << ";;;"
-                <<  (std::accumulate(global_multop_get_times_sum.begin(), global_multop_get_times_sum.end(),
-                        decltype(global_multop_get_times_sum)::value_type(0))) / np                        
+                <<  std::accumulate(global_multop_get_times_sum.begin(), global_multop_get_times_sum.end(),
+                        decltype(global_multop_get_times_sum)::value_type(0))                        
                 << ";;;"
-                <<  (std::accumulate(global_multop_dgemm_times_sum.begin(), global_multop_dgemm_times_sum.end(),
-                        decltype(global_multop_dgemm_times_sum)::value_type(0))) / np 
+                <<  std::accumulate(global_multop_dgemm_times_sum.begin(), global_multop_dgemm_times_sum.end(),
+                        decltype(global_multop_dgemm_times_sum)::value_type(0))
                 << ";;;"
-                <<  (std::accumulate(global_multop_add_times_sum.begin(), global_multop_add_times_sum.end(),
-                        decltype(global_multop_add_times_sum)::value_type(0))) / np 
+                <<  std::accumulate(global_multop_add_times_sum.begin(), global_multop_add_times_sum.end(),
+                        decltype(global_multop_add_times_sum)::value_type(0))
                 << std::endl;
             // << "," << globalgettime/nranks << "," 
             // << globaladdtime/nranks << "," << globalgemmtime/nranks << std::endl;            

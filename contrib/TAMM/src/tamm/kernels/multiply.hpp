@@ -8,18 +8,10 @@
 #include <algorithm>
 #ifdef USE_BLIS
 // disable BLAS prototypes within BLIS.
-#define BLIS_DISABLE_BLAS_DEFS
+#define BLIS_DISABLE_BLAS_DEFS    
 #include "blis/blis.h"
 #endif
-
-#if defined(TAMM_BLA_MKL)
-  #include "mkl.h"
-#elif defined(TAMM_BLA_ESSL)
-  #include "essl.h"
-#elif defined(TAMM_BLA_REFERENCE)
-  #include "blis/cblas.h"  
-#endif
-
+#include CBLAS_HEADER
 #include <complex>
 #include <numeric>
 #include <vector>
@@ -38,12 +30,6 @@ using tensor_handle = talsh_tens_t;
 #undef C8
 #undef C9
 #undef C10
-#endif
-
-#ifdef USE_DPCPP
-#include <CL/sycl.hpp>
-#include "mkl_blas_sycl.hpp"
-using namespace oneapi;
 #endif
 
 namespace tamm {
@@ -118,25 +104,18 @@ inline void gemm_wrapper<std::complex<double>>(
 namespace kernels {
 
 template<typename T, typename T1, typename T2, typename T3>
-void block_multiply(bool &isgpuOp,
+void block_multiply(bool &isgpuOp,  
         #ifdef USE_TALSH
-          TALSH& gpu_mult, talsh_task_t& talsh_task,
-          tensor_handle& th_c, tensor_handle& th_a, tensor_handle& th_b,
+          TALSH& gpu_mult, talsh_task_t& talsh_task, 
+          tensor_handle& th_c, tensor_handle& th_a, tensor_handle& th_b, 
           int copy_ctrl,
         #endif
           int dev_id, T alpha, const T2* abuf, const SizeVec& adims,
           const IntLabelVec& alabels, const T3* bbuf,
           const SizeVec& bdims, const IntLabelVec& blabels, T beta,
-          T1* cbuf, const SizeVec& cdims, const IntLabelVec& clabels,
+          T1* cbuf, const SizeVec& cdims, const IntLabelVec& clabels, 
           ExecutionHW hw = ExecutionHW::CPU, bool has_gpu = false,
           bool is_assign = true) {
-#ifdef USE_DPCPP
-    cl::sycl::gpu_selector dev_selector;
-    cl::sycl::queue dev_queue(dev_selector);
-    cl::sycl::device syclDev = dev_queue.get_device();
-    cl::sycl::context syclContxt = dev_queue.get_context();
-#endif
-
     const Size asize = std::accumulate(adims.begin(), adims.end(), Size{1},
                                        std::multiplies<Size>());
     const Size bsize = std::accumulate(bdims.begin(), bdims.end(), Size{1},
@@ -280,32 +259,11 @@ void block_multiply(bool &isgpuOp,
            alabels, true);
     assign<T3>(binter_buf.data(), binter_dims, binter_labels, T3{1}, bbuf, bdims,
            blabels, true);
-#ifdef USE_DPCPP
-    T2* ainter_buf_dev = (T2*)cl::sycl::malloc_device(ainter_buf.size()*sizeof(T2), syclDev, syclContxt);
-    T3* binter_buf_dev = (T3*)cl::sycl::malloc_device(binter_buf.size()*sizeof(T3), syclDev, syclContxt);
-    T1* cinter_buf_dev = (T1*)cl::sycl::malloc_device(cinter_buf.size()*sizeof(T1), syclDev, syclContxt);
-
-    // host-->device copy
-    cl::sycl::event evt_ainter_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(ainter_buf_dev, ainter_buf.data(), ainter_buf.size()*sizeof(T2)); });
-    cl::sycl::event evt_binter_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(binter_buf_dev, binter_buf.data(), binter_buf.size()*sizeof(T3)); });
-    cl::sycl::event evt_cinter_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(cinter_buf_dev, cinter_buf.data(), cinter_buf.size()*sizeof(T1)); });
-    dev_queue.wait_and_throw();
-#endif
-
     // dgemm
     if constexpr(std::is_same_v<T1,T2> && std::is_same_v<T1,T3>){
       for(size_t ari = 0; ari < AR; ari++) {
           for(size_t bri = 0; bri < BR; bri++) {
               for(size_t i = 0; i < B; i++) {
-#ifdef USE_DPCPP
-                mkl::blas::gemm(dev_queue, mkl::transpose::N, mkl::transpose::N, N, M, K, alpha,
-                                binter_buf_dev + bri * breduce_ld + i * bbatch_ld,
-                                binter_ld,
-                                ainter_buf_dev + ari * areduce_ld + i * abatch_ld,
-                                ainter_ld, beta, cinter_buf_dev + i * cbatch_ld,
-                                cinter_ld);
-                dev_queue.wait();
-#else
                   internal::gemm_wrapper<T>(
                     CblasRowMajor, transA, transB, M, N, K, alpha,
                     ainter_buf.data() + ari * areduce_ld + i * abatch_ld,
@@ -313,15 +271,9 @@ void block_multiply(bool &isgpuOp,
                     binter_buf.data() + bri * breduce_ld + i * bbatch_ld,
                     binter_ld, beta, cinter_buf.data() + i * cbatch_ld,
                     cinter_ld);
-#endif
               }
           }
       }
-#ifdef USE_DPCPP
-      // device-->host copy
-      cl::sycl::event evt_cinter_d2h = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(cinter_buf.data(), cinter_buf_dev, cinter_buf.size()*sizeof(T1)); });
-      dev_queue.wait_and_throw();
-#endif
     }
     #ifdef USE_BLIS
     else {
@@ -336,24 +288,10 @@ void block_multiply(bool &isgpuOp,
             bli_dcopyv(BLIS_NO_CONJUGATE,bsize.value(),&binter_buf[0],1,bbuf_comp_ptr,2);
           else if constexpr(std::is_same_v<T3,float>)
             bli_scopyv(BLIS_NO_CONJUGATE,bsize.value(),&binter_buf[0],1,bbuf_comp_ptr,2);
-#ifdef USE_DPCPP
-          T1* bbuf_complex_dev = (T1*)cl::sycl::malloc_device(bbuf_complex.size()*sizeof(T1), syclDev, syclContxt);
-          // host-->device copy
-          cl::sycl::event evt_bbuf_complex_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(bbuf_complex_dev, bbuf_complex.data(), bbuf_complex.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
 
           for(size_t ari = 0; ari < AR; ari++) {
             for(size_t bri = 0; bri < BR; bri++) {
               for(size_t i = 0; i < B; i++) {
-#ifdef USE_DPCPP
-                mkl::blas::gemm(dev_queue, mkl::transpose::N, mkl::transpose::N, N, M, K, alpha,
-                                bbuf_complex_dev + bri * breduce_ld + i * bbatch_ld,
-                                binter_ld,
-                                ainter_buf_dev + ari * areduce_ld + i * abatch_ld,
-                                ainter_ld, beta, cinter_buf_dev + i * cbatch_ld,
-                                cinter_ld);
-#else
                 internal::gemm_wrapper<T>(
                   CblasRowMajor, transA, transB, M, N, K, alpha,
                   ainter_buf.data() + ari * areduce_ld + i * abatch_ld,
@@ -361,15 +299,9 @@ void block_multiply(bool &isgpuOp,
                   bbuf_complex.data() + bri * breduce_ld + i * bbatch_ld,
                   binter_ld, beta, cinter_buf.data() + i * cbatch_ld,
                   cinter_ld);
-#endif
               }
             }
           }
-#ifdef USE_DPCPP
-          // device-->host copy
-          cl::sycl::event evt_cinter_d2h = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(cinter_buf.data(), cinter_buf_dev, cinter_buf.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
         } //is_complex<T1>
         else {
           //T1,T2 (C,A) are real, T3 (B) is complex
@@ -379,24 +311,10 @@ void block_multiply(bool &isgpuOp,
             bli_dcopyv(BLIS_NO_CONJUGATE,bsize.value(),bbuf_comp_ptr,2,&bbuf_real[0],1);
           else if constexpr(std::is_same_v<T1,float>)
             bli_scopyv(BLIS_NO_CONJUGATE,bsize.value(),bbuf_comp_ptr,2,&bbuf_real[0],1);
-#ifdef USE_DPCPP
-          T1* bbuf_real_dev = (T1*)cl::sycl::malloc_device(bbuf_real.size()*sizeof(T1), syclDev, syclContxt);
-          // host-->device copy
-          cl::sycl::event evt_bbuf_real_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(bbuf_real_dev, bbuf_real.data(), bbuf_real.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
 
           for(size_t ari = 0; ari < AR; ari++) {
             for(size_t bri = 0; bri < BR; bri++) {
               for(size_t i = 0; i < B; i++) {
-#ifdef USE_DPCPP
-                mkl::blas::gemm(dev_queue, mkl::transpose::N, mkl::transpose::N, N, M, K, alpha,
-                                bbuf_real_dev + bri * breduce_ld + i * bbatch_ld,
-                                binter_ld,
-                                ainter_buf_dev + ari * areduce_ld + i * abatch_ld,
-                                ainter_ld, beta, cinter_buf_dev + i * cbatch_ld,
-                                cinter_ld);
-#else
                 internal::gemm_wrapper<T1>(
                   CblasRowMajor, transA, transB, M, N, K, alpha,
                   ainter_buf.data() + ari * areduce_ld + i * abatch_ld,
@@ -404,15 +322,9 @@ void block_multiply(bool &isgpuOp,
                   bbuf_real.data() + bri * breduce_ld + i * bbatch_ld,
                   binter_ld, beta, cinter_buf.data() + i * cbatch_ld,
                   cinter_ld);
-#endif
               }
             }
           }
-#ifdef USE_DPCPP
-          // device-->host copy
-          cl::sycl::event evt_cinter_d2h = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(cinter_buf.data(), cinter_buf_dev, cinter_buf.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
         } //is_real<T1>
 
       } //is_same_v<T1,T2>
@@ -425,24 +337,10 @@ void block_multiply(bool &isgpuOp,
             bli_dcopyv(BLIS_NO_CONJUGATE,asize.value(),&ainter_buf[0],1,abuf_comp_ptr,2);
           else if constexpr(std::is_same_v<T2,float>)
             bli_scopyv(BLIS_NO_CONJUGATE,asize.value(),&ainter_buf[0],1,abuf_comp_ptr,2);
-#ifdef USE_DPCPP
-          T1* abuf_complex_dev = (T1*)cl::sycl::malloc_device(abuf_complex.size()*sizeof(T1), syclDev, syclContxt);
-          // host-->device copy
-          cl::sycl::event evt_abuf_complex_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(abuf_complex_dev, abuf_complex.data(), abuf_complex.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
 
           for(size_t ari = 0; ari < AR; ari++) {
             for(size_t bri = 0; bri < BR; bri++) {
               for(size_t i = 0; i < B; i++) {
-#ifdef USE_DPCPP
-                mkl::blas::gemm(dev_queue, mkl::transpose::N, mkl::transpose::N, N, M, K, alpha,
-                                binter_buf_dev + bri * breduce_ld + i * bbatch_ld,
-                                binter_ld,
-                                abuf_complex_dev + ari * areduce_ld + i * abatch_ld,
-                                ainter_ld, beta, cinter_buf_dev + i * cbatch_ld,
-                                cinter_ld);
-#else
                 internal::gemm_wrapper<T>(
                   CblasRowMajor, transA, transB, M, N, K, alpha,
                   abuf_complex.data() + ari * areduce_ld + i * abatch_ld,
@@ -450,15 +348,9 @@ void block_multiply(bool &isgpuOp,
                   binter_buf.data() + bri * breduce_ld + i * bbatch_ld,
                   binter_ld, beta, cinter_buf.data() + i * cbatch_ld,
                   cinter_ld);
-#endif
               }
             }
           }
-#ifdef USE_DPCPP
-          // device-->host copy
-          cl::sycl::event evt_cinter_d2h = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(cinter_buf.data(), cinter_buf_dev, cinter_buf.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
         }
         else{
           //T1,T3 (C,B) are real, T2 (A) is complex
@@ -468,24 +360,10 @@ void block_multiply(bool &isgpuOp,
             bli_dcopyv(BLIS_NO_CONJUGATE,asize.value(),abuf_comp_ptr,2,&abuf_real[0],1);
           else if constexpr(std::is_same_v<T1,float>)
             bli_scopyv(BLIS_NO_CONJUGATE,asize.value(),abuf_comp_ptr,2,&abuf_real[0],1);
-#ifdef USE_DPCPP
-          T1* abuf_real_dev = (T1*)cl::sycl::malloc_device(abuf_real.size()*sizeof(T1), syclDev, syclContxt);
-          // host-->device copy
-          cl::sycl::event evt_abuf_real_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(abuf_real_dev, abuf_real.data(), abuf_real.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
 
           for(size_t ari = 0; ari < AR; ari++) {
             for(size_t bri = 0; bri < BR; bri++) {
               for(size_t i = 0; i < B; i++) {
-#ifdef USE_DPCPP
-                mkl::blas::gemm(dev_queue, mkl::transpose::N, mkl::transpose::N, N, M, K, alpha,
-                                binter_buf_dev + bri * breduce_ld + i * bbatch_ld,
-                                binter_ld,
-                                abuf_real_dev + ari * areduce_ld + i * abatch_ld,
-                                ainter_ld, beta, cinter_buf_dev + i * cbatch_ld,
-                                cinter_ld);
-#else
                 internal::gemm_wrapper<T1>(
                   CblasRowMajor, transA, transB, M, N, K, alpha,
                   abuf_real.data() + ari * areduce_ld + i * abatch_ld,
@@ -493,15 +371,10 @@ void block_multiply(bool &isgpuOp,
                   binter_buf.data() + bri * breduce_ld + i * bbatch_ld,
                   binter_ld, beta, cinter_buf.data() + i * cbatch_ld,
                   cinter_ld);
-#endif
               }
             }
           }
-#ifdef USE_DPCPP
-          // device-->host copy
-          cl::sycl::event evt_cinter_d2h = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(cinter_buf.data(), cinter_buf_dev, cinter_buf.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
+
         }
 
       } //is_same_v<T1,T3>
@@ -521,26 +394,10 @@ void block_multiply(bool &isgpuOp,
             bli_scopyv(BLIS_NO_CONJUGATE,asize.value(),&ainter_buf[0],1,abuf_comp_ptr,2);
             bli_scopyv(BLIS_NO_CONJUGATE,bsize.value(),&binter_buf[0],1,bbuf_comp_ptr,2);
           }
-#ifdef USE_DPCPP
-        T1* abuf_complex_dev = (T1*)cl::sycl::malloc_device(abuf_complex.size()*sizeof(T1), syclDev, syclContxt);
-        T2* bbuf_complex_dev = (T2*)cl::sycl::malloc_device(bbuf_complex.size()*sizeof(T2), syclDev, syclContxt);
-        // host-->device copy
-        cl::sycl::event evt_abuf_complex_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(abuf_complex_dev, abuf_complex.data(), abuf_complex.size()*sizeof(T1)); });
-        cl::sycl::event evt_bbuf_complex_h2d = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(bbuf_complex_dev, bbuf_complex.data(), bbuf_complex.size()*sizeof(T2)); });
-        dev_queue.wait_and_throw();
-#endif
 
           for(size_t ari = 0; ari < AR; ari++) {
             for(size_t bri = 0; bri < BR; bri++) {
               for(size_t i = 0; i < B; i++) {
-#ifdef USE_DPCPP
-                mkl::blas::gemm(dev_queue, mkl::transpose::N, mkl::transpose::N, N, M, K, alpha,
-                                bbuf_complex_dev + bri * breduce_ld + i * bbatch_ld,
-                                binter_ld,
-                                abuf_complex_dev + ari * areduce_ld + i * abatch_ld,
-                                ainter_ld, beta, cinter_buf_dev + i * cbatch_ld,
-                                cinter_ld);
-#else
                 internal::gemm_wrapper<T>(
                   CblasRowMajor, transA, transB, M, N, K, alpha,
                   abuf_complex.data() + ari * areduce_ld + i * abatch_ld,
@@ -548,38 +405,26 @@ void block_multiply(bool &isgpuOp,
                   bbuf_complex.data() + bri * breduce_ld + i * bbatch_ld,
                   binter_ld, beta, cinter_buf.data() + i * cbatch_ld,
                   cinter_ld);
-#endif
               }
             }
           }
-#ifdef USE_DPCPP
-          // device-->host copy
-          cl::sycl::event evt_cinter_d2h = dev_queue.submit([&](cl::sycl::handler &cgh) {cgh.memcpy(cinter_buf.data(), cinter_buf_dev, cinter_buf.size()*sizeof(T1)); });
-          dev_queue.wait_and_throw();
-#endif
-      }
 
-      else NOT_IMPLEMENTED();
+      }
+      
+      else NOT_IMPLEMENTED();    
     }
     #endif
     // C[0]="<<cinter_buf[0]<<"\n";
-
-#ifdef USE_DPCPP
-    cl::sycl::free(ainter_buf_dev, syclContxt);
-    cl::sycl::free(binter_buf_dev, syclContxt);
-    cl::sycl::free(cinter_buf_dev, syclContxt);
-#endif
-
     assign<T1>(cbuf, cdims, clabels, T{1}, cinter_buf.data(), cinter_dims,
            cinter_labels, is_assign);
     };
     #ifndef USE_TALSH
-      bmult_cpu_lambda();
-
-    #else
-
+      bmult_cpu_lambda(); 
+    
+    #else 
+    
     auto talsh_op_string = internal::talsh_mult_op_string(
-                                clabels, alabels, blabels);
+                                clabels, alabels, blabels); 
 
     auto aid_size = adims.size();
     auto bid_size = bdims.size();
@@ -587,7 +432,7 @@ void block_multiply(bool &isgpuOp,
     int tal_adims[aid_size];
     int tal_bdims[bid_size];
     int tal_cdims[cid_size];
-
+    
     std::vector<int> taid;
     std::vector<int> tbid;
     std::vector<int> tcid;
@@ -626,7 +471,7 @@ void block_multiply(bool &isgpuOp,
     }
 
     if(hadamard || reduction_op || hw == ExecutionHW::CPU || !has_gpu) {
-      bmult_cpu_lambda();
+      bmult_cpu_lambda(); 
     }
 
     else {
@@ -635,28 +480,28 @@ void block_multiply(bool &isgpuOp,
       // std::cout << talsh_op_string << std::endl;
       // std::cout << aid_size << ":" << bid_size << ":" << cid_size << std::endl;
 
-      // adata, bdata, cdata will have to be created
-      // using pinned memory else where for now using
+      // adata, bdata, cdata will have to be created 
+      // using pinned memory else where for now using 
       // regular memory
-      // double *adata = host_pinned_memory(abatch_ld*sizeof(double));
-      // double *bdata = host_pinned_memory(bbatch_ld*sizeof(double));
-      // double *cdata = host_pinned_memory(cbatch_ld*sizeof(double));
+      // double *adata = host_pinned_memory(abatch_ld*sizeof(double)); 
+      // double *bdata = host_pinned_memory(bbatch_ld*sizeof(double)); 
+      // double *cdata = host_pinned_memory(cbatch_ld*sizeof(double)); 
 
       // TALSH gpu_mult{ngpu};
-      T2* abufp = const_cast<T2*>(abuf);
-      T3* bbufp = const_cast<T3*>(bbuf);
+      T2* abufp = const_cast<T2*>(abuf); 
+      T3* bbufp = const_cast<T3*>(bbuf); 
 
       if constexpr(std::is_same_v<T1,T2> && std::is_same_v<T1,T3>){
-           th_a = gpu_mult.host_block(adims.size(),
-              tal_adims, abufp);
-           th_b = gpu_mult.host_block(bdims.size(),
-              tal_bdims, bbufp);
+           th_a = gpu_mult.host_block(adims.size(), 
+              tal_adims, abufp); 
+           th_b = gpu_mult.host_block(bdims.size(), 
+              tal_bdims, bbufp); 
           if(copy_ctrl == COPY_TTT)
-            th_c = gpu_mult.host_block(cdims.size(),
-               tal_cdims, cbuf);
+            th_c = gpu_mult.host_block(cdims.size(), 
+               tal_cdims, cbuf); 
 
-          gpu_mult.mult_block(talsh_task, dev_id, th_c, th_a, th_b, talsh_op_string,
-              alpha, copy_ctrl, is_assign);
+          gpu_mult.mult_block(talsh_task, dev_id, th_c, th_a, th_b, talsh_op_string, 
+              alpha, copy_ctrl, is_assign); 
 
           // talshTensorDestruct(&th_a);
           // talshTensorDestruct(&th_b);
@@ -677,21 +522,21 @@ void block_multiply(bool &isgpuOp,
           else if constexpr(std::is_same_v<T3,float>)
             bli_scopyv(BLIS_NO_CONJUGATE,bsize.value(),bbufp,1,bbuf_comp_ptr,2);
 
-          th_a = gpu_mult.host_block(adims.size(),
-              tal_adims, abufp);
-          th_b = gpu_mult.host_block(bdims.size(),
-              tal_bdims, bbuf_complex.data());
+          th_a = gpu_mult.host_block(adims.size(), 
+              tal_adims, abufp); 
+          th_b = gpu_mult.host_block(bdims.size(), 
+              tal_bdims, bbuf_complex.data()); 
           if(copy_ctrl == COPY_TTT)
-          th_c = gpu_mult.host_block(cdims.size(),
-              tal_cdims, cbuf);
+          th_c = gpu_mult.host_block(cdims.size(), 
+              tal_cdims, cbuf); 
 
-          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string,
-              alpha, copy_ctrl, is_assign);
+          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string, 
+              alpha, copy_ctrl, is_assign); 
 
           // talshTensorDestruct(&th_a);
           // talshTensorDestruct(&th_b);
           // talshTensorDestruct(&th_c);
-
+         
         } //is_complex<T1>
         else {
           //T1,T2 (C,A) are real, T3 (B) is complex
@@ -702,21 +547,21 @@ void block_multiply(bool &isgpuOp,
           else if constexpr(std::is_same_v<T1,float>)
             bli_scopyv(BLIS_NO_CONJUGATE,bsize.value(),bbuf_comp_ptr,2,&bbuf_real[0],1);
 
-          th_a = gpu_mult.host_block(adims.size(),
-              tal_adims, abufp);
-          th_b = gpu_mult.host_block(bdims.size(),
-              tal_bdims, bbuf_real.data());
+          th_a = gpu_mult.host_block(adims.size(), 
+              tal_adims, abufp); 
+          th_b = gpu_mult.host_block(bdims.size(), 
+              tal_bdims, bbuf_real.data()); 
           if(copy_ctrl == COPY_TTT)
-          th_c = gpu_mult.host_block(cdims.size(),
-              tal_cdims, cbuf);
+          th_c = gpu_mult.host_block(cdims.size(), 
+              tal_cdims, cbuf); 
 
-          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string,
-              alpha, copy_ctrl, is_assign);
+          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string, 
+              alpha, copy_ctrl, is_assign); 
 
           // talshTensorDestruct(&th_a);
           // talshTensorDestruct(&th_b);
           // talshTensorDestruct(&th_c);
-
+       
         } //is_real<T1>
 
       } //is_same_v<T1,T2>
@@ -730,21 +575,21 @@ void block_multiply(bool &isgpuOp,
           else if constexpr(std::is_same_v<T2,float>)
             bli_scopyv(BLIS_NO_CONJUGATE,asize.value(),abufp,1,abuf_comp_ptr,2);
 
-          th_a = gpu_mult.host_block(adims.size(),
-              tal_adims, abuf_complex.data());
-          th_b = gpu_mult.host_block(bdims.size(),
-              tal_bdims, bbufp);
+          th_a = gpu_mult.host_block(adims.size(), 
+              tal_adims, abuf_complex.data()); 
+          th_b = gpu_mult.host_block(bdims.size(), 
+              tal_bdims, bbufp); 
           if(copy_ctrl == COPY_TTT)
-          th_c = gpu_mult.host_block(cdims.size(),
-              tal_cdims, cbuf);
+          th_c = gpu_mult.host_block(cdims.size(), 
+              tal_cdims, cbuf); 
 
-          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string,
-              alpha, copy_ctrl, is_assign);
+          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string, 
+              alpha, copy_ctrl, is_assign); 
 
           // talshTensorDestruct(&th_a);
           // talshTensorDestruct(&th_b);
           // talshTensorDestruct(&th_c);
-
+          
         }
         else{
           //T1,T3 (C,B) are real, T2 (A) is complex
@@ -763,8 +608,8 @@ void block_multiply(bool &isgpuOp,
           th_c = gpu_mult.host_block(cdims.size(), 
               tal_cdims, cbuf); 
 
-          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string,
-              alpha, copy_ctrl, is_assign);
+          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string, 
+              alpha, copy_ctrl, is_assign); 
 
           // talshTensorDestruct(&th_a);
           // talshTensorDestruct(&th_b);
@@ -798,28 +643,28 @@ void block_multiply(bool &isgpuOp,
           th_c = gpu_mult.host_block(cdims.size(), 
               tal_cdims, cbuf); 
 
-          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string,
-              alpha, copy_ctrl, is_assign);
+          gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string, 
+              alpha, copy_ctrl, is_assign); 
 
           // talshTensorDestruct(&th_a);
           // talshTensorDestruct(&th_b);
           // talshTensorDestruct(&th_c);
-
+          
       }
-      else NOT_IMPLEMENTED();
+      else NOT_IMPLEMENTED();    
     }
     #endif
 
-      // Create tensor objects
-      // tensor_handle th_a = gpu_mult.host_block(adims.size(),
-      //     tal_adims, abufp);
-      // tensor_handle th_b = gpu_mult.host_block(bdims.size(),
-      //     tal_bdims, bbufp);
-      // tensor_handle th_c = gpu_mult.host_block(cdims.size(),
-      //     tal_cdims, cbuf);
+      // Create tensor objects 
+      // tensor_handle th_a = gpu_mult.host_block(adims.size(), 
+      //     tal_adims, abufp); 
+      // tensor_handle th_b = gpu_mult.host_block(bdims.size(), 
+      //     tal_bdims, bbufp); 
+      // tensor_handle th_c = gpu_mult.host_block(cdims.size(), 
+      //     tal_cdims, cbuf); 
 
-      // gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string,
-      //     alpha, copy_ctrl, is_assign);
+      // gpu_mult.mult_block(talsh_task,dev_id, th_c, th_a, th_b, talsh_op_string, 
+      //     alpha, copy_ctrl, is_assign); 
 
       // talshTensorDestruct(&th_a);
       // talshTensorDestruct(&th_b);
@@ -836,4 +681,3 @@ void block_multiply(bool &isgpuOp,
 } // namespace tamm
 
 #endif // TAMM_MULTIPLY_HPP_
-

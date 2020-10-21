@@ -259,8 +259,7 @@ std::tuple<double,double> cd_ccsd_driver(SystemData sys_data, ExecutionContext& 
     double thresh      = sys_data.options_map.ccsd_options.threshold;
     bool   writet      = sys_data.options_map.ccsd_options.writet;
     int    writet_iter = sys_data.options_map.ccsd_options.writet_iter;
-    double zshiftl     = sys_data.options_map.ccsd_options.lshift;
-    bool   profile     = sys_data.options_map.ccsd_options.profile_ccsd;    
+    double zshiftl     = sys_data.options_map.ccsd_options.lshift;                
     double residual    = 0.0;
     double energy      = 0.0;
     int    niter       = 0;
@@ -423,8 +422,6 @@ std::tuple<double,double> cd_ccsd_driver(SystemData sys_data, ExecutionContext& 
           sch.execute();
         #endif
 
-        Tensor<T> d_r1_residual{}, d_r2_residual{};
-        Tensor<T>::allocate(&ec,d_r1_residual, d_r2_residual);
 
         for(int titer = 0; titer < maxiter; titer += ndiis) {
           for(int iter = titer; iter < std::min(titer + ndiis, maxiter); iter++) {
@@ -434,7 +431,15 @@ std::tuple<double,double> cd_ccsd_driver(SystemData sys_data, ExecutionContext& 
             niter   = iter;
             int off = iter - titer;
             
+            Tensor<T> d_r1_residual{};
+            Tensor<T> d_r2_residual{};
+
+            Tensor<T>::allocate(&ec, d_r1_residual, d_r2_residual);
+
             sch
+               (d_e()           = 0)
+               (d_r1_residual() = 0)
+               (d_r2_residual() = 0)
                ((d_t1s[off])()  = d_t1())
                ((d_t2s[off])()  = d_t2())
                .execute();
@@ -461,14 +466,13 @@ std::tuple<double,double> cd_ccsd_driver(SystemData sys_data, ExecutionContext& 
               ;
 
             #ifdef USE_TALSH
-              sch.execute(ExecutionHW::GPU, profile);
+              sch.execute(ExecutionHW::GPU);
             #else
               sch.execute();
             #endif
 
             std::tie(residual, energy) = rest(ec, MO, d_r1, d_r2, d_t1, d_t2,
-                                              d_e, d_r1_residual, d_r2_residual, 
-                                              p_evl_sorted, zshiftl, n_occ_alpha, n_occ_beta);
+                                              d_e, p_evl_sorted, zshiftl, n_occ_alpha, n_occ_beta);
 
             update_r2(ec, d_r2());
 
@@ -481,6 +485,7 @@ std::tuple<double,double> cd_ccsd_driver(SystemData sys_data, ExecutionContext& 
             auto iter_time = std::chrono::duration_cast<std::chrono::duration<double>>((timer_end - timer_start)).count();
 
             iteration_print(ec.pg(), iter, residual, energy, iter_time);
+            Tensor<T>::deallocate(d_r1_residual, d_r2_residual);
 
             if(writet && ( ((iter+1)%writet_iter == 0) || (residual < thresh) ) ) {
                 write_to_disk(d_t1,t1file);
@@ -526,7 +531,6 @@ std::tuple<double,double> cd_ccsd_driver(SystemData sys_data, ExecutionContext& 
                        _a008_bb,_a019_aaaa,_a019_abab,_a019_bbbb,_a020_aaaa,_a020_baba,
                        _a020_abab,_a020_baab,_a020_bbbb,_a020_abba,_a022_aaaa,_a022_abab,_a022_bbbb,
                        i0_atmp,i0_btmp); //t2
-        sch.deallocate(d_r1_residual, d_r2_residual);
 
     } //no restart
     else {
@@ -560,6 +564,7 @@ std::tuple<double,double> cd_ccsd_driver(SystemData sys_data, ExecutionContext& 
                    chol3d_aa_oo, chol3d_aa_ov, chol3d_aa_vo, chol3d_aa_vv,
                    chol3d_bb_oo, chol3d_bb_ov, chol3d_bb_vo, chol3d_bb_vv)
         .execute();
+
 
     return std::make_tuple(residual,energy);
 

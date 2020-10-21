@@ -1,5 +1,6 @@
-#define DOCTEST_CONFIG_IMPLEMENT
-#include "doctest/doctest.h"
+//#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_RUNNER
+#include "catch/catch.hpp"
 #include "ga-mpi.h"
 #include "ga.h"
 #include "macdecls.h"
@@ -108,13 +109,27 @@ void test_ops(const TiledIndexSpace& MO) {
 }
 
 int main(int argc, char* argv[]) {
-
+    // MPI_Init(&argc, &argv);
+    // GA_Initialize();
+    // MA_init(MT_DBL, 8000000, 20000000);
     tamm::initialize(argc, argv);
 
-    doctest::Context context(argc, argv);
+    int mpi_rank;
+    MPI_Comm_rank(GA_MPI_Comm(), &mpi_rank);
 
-    int res = context.run();
+    #ifdef USE_TALSH
+    TALSH talsh_instance;
+    talsh_instance.initialize(mpi_rank);
+    #endif
 
+    int res = Catch::Session().run(argc, argv);
+    
+    #ifdef USE_TALSH
+    talsh_instance.shutdown();
+    #endif  
+
+    // GA_Terminate();
+    // MPI_Finalize();
     tamm::finalize();
 
     return res;

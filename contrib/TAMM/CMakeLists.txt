@@ -1,24 +1,15 @@
-cmake_minimum_required(VERSION 3.17.0)
+cmake_minimum_required(VERSION 3.13)
 project(tamm VERSION 0.0.0 LANGUAGES C CXX Fortran)
 include(${PROJECT_SOURCE_DIR}/cmake/check_user_env.cmake)
 set(NWX_PROJECTS tamm)
 
-set(tamm_DEPENDENCIES NWX_MPI MSGSL Eigen3 LibInt2 HPTT HDF5) # GlobalArrays BLAS LAPACK
-
-if(DEFINED BLAS_VENDOR)
-    if(NOT ${BLAS_VENDOR} STREQUAL "ReferenceBLAS")
-        list(APPEND tamm_DEPENDENCIES BLIS)
-    endif()
-endif()
+set(tamm_DEPENDENCIES NWX_MPI MSGSL Eigen3 GlobalArrays LibInt2 CBLAS LAPACKE HPTT BLIS)
 
 if(USE_CUDA) 
    list(APPEND tamm_DEPENDENCIES TALSH)
 endif()
 
-list(APPEND tamm_DEPENDENCIES GlobalArrays BLAS LAPACK)
-
 set(BUILD_METHODS OFF)
-
 set(tamm_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/tamm)
 set(tamm_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests/)
 
