@@ -2,7 +2,7 @@
 The prerequisites needed to build:
 
 - autotools
-- cmake >= 3.13
+- cmake >= 3.17
 - MPI Library
 - C++17 compiler
 - CUDA >= 10.1 (only if building with GPU support)
@@ -12,9 +12,9 @@ The prerequisites needed to build:
 
 Supported Compilers
 --------------------
-- GCC versions >= 8.x
-- LLVM Clang >= 7.x (Tested on Linux Only)
-- `MACOSX`: We only support brew installed `GCC`, AppleClang is not supported.
+- GCC versions >= 8.3
+- LLVM Clang >= 8 (Tested on Linux Only)
+- `MACOSX`: We only support brew installed `GCC`, `AppleClang` is not supported.
 
 
 Supported Configurations
@@ -24,7 +24,8 @@ Supported Configurations
   - LLVM Clang versions >= 7.x + OpenMPI-2.x/MPICH-3.x 
 
 
-# Build Instructions
+Build Instructions
+=====================
 
 ```
 export GFCC_SRC=$HOME/gfcc_src
@@ -33,7 +34,7 @@ git clone https://github.com/spec-org/gfcc.git $GFCC_SRC
 ```
 
 Step 1: Setup CMakeBuild
--------------------------
+========================
 ```
 cd $GFCC_SRC/contrib/CMakeBuild
 mkdir build && cd build
@@ -43,36 +44,63 @@ CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
 make install
 ```
 
-Step 2: General TAMM build using GCC
-------------------------------------
+Step 2: Choose Build Options
+============================
+
+### CUDA Options 
+```
+-DUSE_CUDA=ON (OFF by Default)  
+-DCUDA_MAXREGCOUNT=128 (set to 64 by Default)
+```
+
+Step 3: Building TAMM
+=====================
+
+```
+cd $GFCC_SRC/contrib/TAMM
+mkdir build && cd build
+```
+
+## In addition to the build options chosen in Step 2, there are various build configurations depending on the BLAS library one wants to use.
+
+* **[Build using reference BLAS from NETLIB](install.md#build-using-reference-blas-from-netlib)**
+
+* **[Build using Intel MKL](install.md#build-using-intel-mkl)**
+
+* **[Build instructions for Summit using ESSL](install.md#build-instructions-for-summit-using-essl)**
+
+* **[Build instructions for Cori](install.md#build-instructions-for-cori)**
+
+## Build using reference BLAS from NETLIB
+
+### To enable CUDA build, add `-DUSE_CUDA=ON`
+
 ```
 cd $GFCC_SRC/contrib/TAMM
 mkdir build && cd build
 
 CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
 
-#CUDA Options
-[-DUSE_CUDA=ON] #OFF by Default
-
 # make step takes a while, please use as many cores as possible
 make -j3
 make install
-ctest (optional)
 ```
 
-Step 3: Building the GFCC library
----------------------------------
+Step 4: Building the GFCC library
+=================================
 ```
 cd $GFCC_SRC
 mkdir build && cd build
 
-CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+### To enable CUDA build, add `-DUSE_CUDA=ON`
+
+CC=gcc CXX=g++ FC=gfortran cmake -DBLAS_VENDOR=IntelMKL -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
 
 make -j2
 ```
 
-Step 4: Running the GFCC code
-------------------------------
+Step 5: Running the GFCC code
+=============================
 `cd $GFCC_SRC/build`   
 `mpirun -n 4 ./test_stage/$GFCC_INSTALL_PATH/methods/GF_CCSD ../tests/co.nwx`
 
@@ -82,41 +110,30 @@ Step 4: Running the GFCC code
 -------------------------------------------------------------------
 
 The following configurations are to be used to replace the `cmake` command in Steps 2 and 3.   
-The remaining instructions in Steps 2 & 3 stay the same.
+The remaining instructions in Steps 3 & 4 stay the same.
 
-Build using GCC+MKL
-----------------------------
+## Build using Intel MKL
 
-Set `GFCC_INSTALL_PATH` and `INTEL_ROOT` accordingly
-
-```
-export GFCC_INSTALL_PATH=$HOME/gfcc_install
-export INTEL_ROOT=/opt/intel/compilers_and_libraries_2019.0.117
-
-export MKL_INC=$INTEL_ROOT/linux/mkl/include
-export MKL_LIBS=$INTEL_ROOT/linux/mkl/lib/intel64
-
-export TAMM_BLASLIBS="$MKL_LIBS/libmkl_intel_ilp64.a;$MKL_LIBS/libmkl_lapack95_ilp64.a;$MKL_LIBS/libmkl_blas95_ilp64.a;$MKL_LIBS/libmkl_intel_thread.a;$MKL_LIBS/libmkl_core.a;$INTEL_ROOT/linux/compiler/lib/intel64/libiomp5.a;-lpthread;-ldl"
-
-CC=gcc CXX=g++ FC=gfortran cmake \
--DCBLAS_INCLUDE_DIRS=$MKL_INC \
--DLAPACKE_INCLUDE_DIRS=$MKL_INC \
--DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH \
--DCBLAS_LIBRARIES=$TAMM_BLASLIBS \
--DLAPACKE_LIBRARIES=$TAMM_BLASLIBS ..
-
-To enable CUDA build, add -DUSE_CUDA=ON
+### Set `MKLROOT` accordingly
 
 ```
+export MKLROOT=/opt/intel/compilers_and_libraries_2019.0.117/linux/mkl
+```
 
-
-Build instructions for Summit (using GCC+ESSL)
-----------------------------------------------
+### To enable CUDA build, add `-DUSE_CUDA=ON`
 
 ```
-module load gcc/8.1.1
-module load cmake/3.14.2
-module load spectrum-mpi/10.3.0.1-20190611
+cd $GFCC_SRC/contrib/TAMM/build
+CC=gcc CXX=g++ FC=gfortran cmake -DBLAS_VENDOR=IntelMKL -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+make -j3
+make install
+```
+
+## Build instructions for Summit using ESSL
+
+```
+module load gcc/8.3.0
+module load cmake/3.17.3
 module load essl/6.1.0-2
 module load cuda/10.1.105
 module load netlib-lapack/3.8.0
@@ -125,66 +142,55 @@ module load netlib-lapack/3.8.0
 ```
 The following paths may need to be adjusted if the modules change:
 
-export GFCC_INSTALL_PATH=$HOME/gfcc_install
-export ESSL_INC=/sw/summit/essl/6.1.0-2/essl/6.1/include
-export TAMM_BLASLIBS="/sw/summit/essl/6.1.0-2/essl/6.1/lib64/libesslsmp.so"
+export ESSLROOT=/sw/summit/essl/6.1.0-2/essl/6.1
 export NETLIB_BLAS_LIBS="/autofs/nccs-svm1_sw/summit/.swci/1-compute/opt/spack/20180914/linux-rhel7-ppc64le/gcc-8.1.1/netlib-lapack-3.8.0-moo2tlhxtaae4ij2vkhrkzcgu2pb3bmy/lib64"
 ```
+
+### To enable CUDA build, add `-DUSE_CUDA=ON`
+
 ```
+cd $GFCC_SRC/contrib/TAMM/build
+
 CC=gcc CXX=g++ FC=gfortran cmake \
--DCBLAS_INCLUDE_DIRS=$ESSL_INC \
--DLAPACKE_INCLUDE_DIRS=$ESSL_INC \
 -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH \
--DCBLAS_LIBRARIES=$TAMM_BLASLIBS \
--DLAPACKE_LIBRARIES=$TAMM_BLASLIBS \
--DTAMM_CXX_FLAGS="-mcpu=power9" \
--DBLIS_CONFIG=power9 .. \
--DTAMM_EXTRA_LIBS=$NETLIB_BLAS_LIBS/liblapack.a 
+-DTAMM_EXTRA_LIBS=$NETLIB_BLAS_LIBS/liblapack.a \
+-DBLIS_CONFIG=power9 \
+-DBLAS_VENDOR=IBMESSL ..
 
-To enable CUDA build, add -DUSE_CUDA=ON
-
+make -j3
+make install
 ```
 
 
-Build instructions for Cori
-----------------------------
+## Build instructions for Cori
 
 ```
 module unload PrgEnv-intel/6.0.5
 module load PrgEnv-gnu/6.0.5
-module swap gcc/8.2.0 
+module swap gcc/8.3.0 
 module swap craype/2.5.18
 module swap cray-mpich/7.7.6 
-module load cmake/3.14.4 
+module load cmake
 module load cuda/10.1.168
-
 ```
 
-- `NOTE:` CMakeBuild (in Step 1) should also be built with the following compiler options.
-  - Remove the compiler options from the cmake line or change them to:  
-    CC=cc CXX=CC FC=ftn 
-
- 
 ```
 export CRAYPE_LINK_TYPE=dynamic
+export MKLROOT=/opt/intel/compilers_and_libraries_2019.3.199/linux/mkl
+```
 
-export GFCC_INSTALL_PATH=$HOME/gfcc_install
-export INTEL_ROOT=/opt/intel/compilers_and_libraries_2019.3.199
-
-export MKL_INC=$INTEL_ROOT/linux/mkl/include
-export MKL_LIBS=$INTEL_ROOT/linux/mkl/lib/intel64
-export TAMM_BLASLIBS="$MKL_LIBS/libmkl_intel_ilp64.a;$MKL_LIBS/libmkl_lapack95_ilp64.a;$MKL_LIBS/libmkl_blas95_ilp64.a;$MKL_LIBS/libmkl_gnu_thread.a;$MKL_LIBS/libmkl_core.a;-lgomp;-lpthread;-ldl"
-
-
-CC=cc CXX=CC FC=ftn cmake -DCBLAS_INCLUDE_DIRS=$MKL_INC \
--DLAPACKE_INCLUDE_DIRS=$MKL_INC \
--DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH \
--DCBLAS_LIBRARIES=$TAMM_BLASLIBS \
--DLAPACKE_LIBRARIES=$TAMM_BLASLIBS ..
-
-To enable CUDA build, add -DUSE_CUDA=ON
+### To enable CUDA build, add `-DUSE_CUDA=ON`
 
 ```
+cd $GFCC_SRC/contrib/TAMM/build
+
+CC=cc CXX=CC FC=ftn cmake -DBLAS_VENDOR=IntelMKL -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+
+make -j3
+make install
+```
+
+
 Build instructions for Mac OS
 -------------------------------
 
@@ -219,8 +225,8 @@ Build instructions for Ubuntu Bionic 18.04
 ```
 sudo apt install g++-8 gcc-8 gfortran-8 openmpi-dev
 
-curl -LJO https://github.com/Kitware/CMake/releases/download/v3.15.3/cmake-3.15.3-Linux-x86_64.tar.gz
-tar xzf cmake-3.15.3-Linux-x86_64.tar.gz
+curl -LJO https://github.com/Kitware/CMake/releases/download/v3.18.4/cmake-3.18.4-Linux-x86_64.tar.gz
+tar xzf cmake-3.18.4-Linux-x86_64.tar.gz
 export PATH=`pwd`/cmake-3.15.3-Linux-x86_64/bin:$PATH
 
 export GFCC_SRC=$HOME/gfcc_src

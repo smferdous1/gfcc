@@ -209,7 +209,7 @@ class CCSDOptions: public Options {
     tilesize       = 50;
     itilesize      = 1000;
     ccsdt_tilesize = 28;
-    icuda          = 0;
+    ngpu           = 0;
     ndiis          = 5;
     lshift         = 0;
     eom_nroots     = 0;
@@ -259,7 +259,7 @@ class CCSDOptions: public Options {
   int    itilesize;
   int    ccsdt_tilesize;
   bool   force_tilesize;
-  int    icuda;
+  int    ngpu;
   int    ndiis;
   int    eom_microiter;
   int    writet_iter;
@@ -296,14 +296,16 @@ class CCSDOptions: public Options {
   int    gf_analyze_level;
   int    gf_analyze_num_omega;
   std::vector<double> gf_analyze_omega;
+  //Force processing of specified orbitals first
+  std::vector<size_t> gf_orbitals;
   
   void print() {
     std::cout << std::defaultfloat;
     cout << endl << "CCSD Options" << endl;
     cout << "{" << endl;
-    if(icuda > 0) {
-      cout << " #cuda              = " << icuda          << endl;
-      cout << " ccsdt_tilesize     = " << ccsdt_tilesize << endl;
+    if(ngpu > 0) {
+      cout << " ngpu                 = " << ngpu          << endl;
+      cout << " ccsdt_tilesize       = " << ccsdt_tilesize << endl;
     }
     cout << " ndiis                = " << ndiis            << endl;
     cout << " threshold            = " << threshold        << endl;
@@ -353,6 +355,11 @@ class CCSDOptions: public Options {
       cout << " gf_omega_max_ea_e    = " << gf_omega_max_ea_e << endl;
       cout << " gf_omega_delta       = " << gf_omega_delta    << endl; 
       cout << " gf_omega_delta_e     = " << gf_omega_delta_e  << endl; 
+      if(!gf_orbitals.empty()) {
+        cout << " gf_orbitals     = [";
+        for(auto x: gf_orbitals) cout << x << ",";
+        cout << "]" << endl;           
+      }
       if(gf_analyze_level > 0) {
         cout << " gf_analyze_level     = " << gf_analyze_level     << endl; 
         cout << " gf_analyze_num_omega = " << gf_analyze_num_omega << endl; 
@@ -726,8 +733,8 @@ std::tuple<Options, SCFOptions, CDOptions, CCSDOptions> read_nwx_file(std::istre
             ccsd_options.ccsdt_tilesize = std::stoi(read_option(line));            
           else if(is_in_line("itilesize",line))
             ccsd_options.itilesize = std::stoi(read_option(line));            
-          else if(is_in_line("cuda",line))
-            ccsd_options.icuda = std::stoi(read_option(line));            
+          else if(is_in_line("ngpu",line))
+            ccsd_options.ngpu = std::stoi(read_option(line));            
           else if(is_in_line("debug",line))
             ccsd_options.debug = to_bool(read_option(line)); 
           else if(is_in_line("readt",line))
@@ -809,6 +816,14 @@ std::tuple<Options, SCFOptions, CDOptions, CCSDOptions> read_nwx_file(std::istre
                                               std::istream_iterator<double>{}};
               ccsd_options.gf_analyze_omega = gf_analyze_omega;
           }          
+          else if(is_in_line("gf_orbitals",line)) {
+              std::istringstream iss(line);
+              std::string wignore;
+              iss >> wignore;
+              std::vector<size_t> gf_orbitals{std::istream_iterator<double>{iss},
+                                              std::istream_iterator<double>{}};
+              ccsd_options.gf_orbitals = gf_orbitals;
+          }                    
           else if(is_in_line("}",line)) section_start = false;
           else unknown_option(line, "CCSD");
 

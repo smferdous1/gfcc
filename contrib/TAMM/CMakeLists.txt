@@ -18,6 +18,7 @@ endif()
 list(APPEND tamm_DEPENDENCIES GlobalArrays BLAS LAPACK)
 
 set(BUILD_METHODS OFF)
+
 set(tamm_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/tamm)
 set(tamm_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests/)
 
