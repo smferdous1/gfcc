@@ -14,7 +14,7 @@ if(NOT DEFINED HPTT_ROOT_DIR)
     pkg_check_modules(PC_HPTT QUIET libhptt)
 endif()
 
-find_path(HPTT_INCLUDE_DIR hptt.h
+find_path(HPTT_INCLUDE_DIR hptt.h hptt/hptt.h
           HINTS ${PC_HPTT_INCLUDEDIR}
                 ${PC_HPTT_INCLUDE_DIRS}
           PATHS ${HPTT_ROOT_DIR}
@@ -38,4 +38,4 @@ if(USE_OPENMP)
 endif()
 
 set(HPTT_LIBRARIES ${HPTT_LIBRARY} ${OpenMP_CXX_FLAGS})
-set(HPTT_INCLUDE_DIRS ${HPTT_INCLUDE_DIR})
+set(HPTT_INCLUDE_DIRS ${HPTT_INCLUDE_DIR} ${HPTT_INCLUDE_DIR}/hptt)
