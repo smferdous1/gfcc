@@ -17,7 +17,7 @@ set(CATCH_TAG ae590fe2163270685ebec4ed1541d3e8e9401692)
 #Where CMake will clone Catch to
 set(CATCH_DOWNLOAD_DIR ${CATCH_PREFIX}/src/Catch_Headers)
 #The path to the single header file in the clone
-set(CATCH_HEADER_FILE ${CATCH_DOWNLOAD_DIR}/single_include/catch.hpp)
+set(CATCH_HEADER_FILE ${CATCH_DOWNLOAD_DIR}/single_include/catch2/catch.hpp)
 #Effective installation path for staging the header
 set(CATCH_STAGE_INSTALL ${CMAKE_BINARY_DIR}/stage${CMAKE_INSTALL_PREFIX})
 #Staged include install path
@@ -28,8 +28,9 @@ set(CATCH_HEADER_INSTALL ${CATCH_STAGE_INCLUDE}/catch/catch.hpp)
 #Actually get Catch's header and install it
 ExternalProject_Add(Catch_Headers
         PREFIX ${CATCH_PREFIX}
-        GIT_REPOSITORY ${CATCH_URL}
-        GIT_TAG ${CATCH_TAG}
+        # GIT_REPOSITORY ${CATCH_URL}
+        # GIT_TAG ${CATCH_TAG}
+        URL ${TAMM_DEPS_TAR_PATH}/Catch2-2.13.2.tar.gz     
         DOWNLOAD_DIR ${CATCH_DOWNLOAD_DIR}
         UPDATE_COMMAND ""
         CONFIGURE_COMMAND ""

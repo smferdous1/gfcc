@@ -32,7 +32,7 @@ if(BLAS_INT4)
 endif()
 
 ExternalProject_Add(BLIS_External
-        URL ${BLIS_TAR}
+        URL ${TAMM_DEPS_TAR_PATH}/blis-0.7.0.tar.gz
         CONFIGURE_COMMAND ./configure --prefix=${CMAKE_INSTALL_PREFIX}
                                       CXX=${CMAKE_CXX_COMPILER}
                                       CC=${CMAKE_C_COMPILER}

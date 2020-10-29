@@ -39,8 +39,8 @@ file(APPEND ${CBLAS_MAKEFILE} "RANLIB = echo\n")
 set(CBLAS_INSTALL_DIR ${STAGE_DIR}${CMAKE_INSTALL_PREFIX})
 ExternalProject_Add(NWX_CBLAS
         DOWNLOAD_NO_PROGRESS TRUE
-        URL ${CBLAS_URL}
-        URL_MD5 ${CBLAS_MD5}
+        URL ${TAMM_DEPS_TAR_PATH}/cblas.tgz
+        # URL_MD5 ${CBLAS_MD5}
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E copy ${CBLAS_MAKEFILE}
                                                    ${MAKEFILE_DEST}
         BUILD_COMMAND $(MAKE) alllib

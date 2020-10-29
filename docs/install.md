@@ -32,13 +32,31 @@ export GFCC_INSTALL_PATH=$HOME/gfcc_install
 git clone https://github.com/spec-org/gfcc.git $GFCC_SRC
 ```
 
+## Download all depedencies to a folder.
+```
+export TAMM_DEPS_TAR_PATH=$HOME/deps
+mkdir $TAMM_DEPS_TAR_PATH && cd $TAMM_DEPS_TAR_PATH
+
+curl -LJO http://www.netlib.org/blas/blas-3.8.0.tgz
+curl -LJO https://github.com/flame/blis/archive/0.7.0.tar.gz
+curl -LJO http://www.netlib.org/lapack/lapack-3.8.0.tar.gz
+curl -LJO http://www.netlib.org/blas/blast-forum/cblas.tgz
+curl -LJO https://github.com/ajaypanyala/ga/releases/download/v5.7.3/ga-5.7.3.tar.gz
+curl -LJO https://github.com/catchorg/Catch2/archive/v2.13.2.tar.gz
+curl -LJO https://gitlab.com/libeigen/eigen/-/archive/3.3.7/eigen-3.3.7.tar.gz
+curl -LJO https://github.com/ajaypanyala/hptt/archive/v1.0.6.tar.gz
+curl -LJO https://github.com/microsoft/GSL/archive/v3.1.0.tar.gz
+curl -LJO https://github.com/ajaypanyala/TAL_SH/archive/v0.1.tar.gz
+curl -LJO https://github.com/evaleev/libint/releases/download/v2.7.0-beta.6/libint-2.7.0-beta.6.tgz
+```
+
 Step 1: Setup CMakeBuild
 -------------------------
 ```
 cd $GFCC_SRC/contrib/CMakeBuild
 mkdir build && cd build
 
-CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 
 make install
 ```
@@ -49,7 +67,7 @@ Step 2: General TAMM build using GCC
 cd $GFCC_SRC/contrib/TAMM
 mkdir build && cd build
 
-CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 
 #CUDA Options
 [-DUSE_CUDA=ON] #OFF by Default
@@ -66,7 +84,7 @@ Step 3: Building the GFCC library
 cd $GFCC_SRC
 mkdir build && cd build
 
-CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc CXX=g++ FC=gfortran cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 
 make -j2
 ```
@@ -103,7 +121,7 @@ CC=gcc CXX=g++ FC=gfortran cmake \
 -DLAPACKE_INCLUDE_DIRS=$MKL_INC \
 -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH \
 -DCBLAS_LIBRARIES=$TAMM_BLASLIBS \
--DLAPACKE_LIBRARIES=$TAMM_BLASLIBS ..
+-DLAPACKE_LIBRARIES=$TAMM_BLASLIBS -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 
 To enable CUDA build, add -DUSE_CUDA=ON
 
@@ -139,7 +157,8 @@ CC=gcc CXX=g++ FC=gfortran cmake \
 -DLAPACKE_LIBRARIES=$TAMM_BLASLIBS \
 -DTAMM_CXX_FLAGS="-mcpu=power9" \
 -DBLIS_CONFIG=power9 .. \
--DTAMM_EXTRA_LIBS=$NETLIB_BLAS_LIBS/liblapack.a 
+-DTAMM_EXTRA_LIBS=$NETLIB_BLAS_LIBS/liblapack.a \
+-DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH
 
 To enable CUDA build, add -DUSE_CUDA=ON
 
@@ -180,7 +199,8 @@ CC=cc CXX=CC FC=ftn cmake -DCBLAS_INCLUDE_DIRS=$MKL_INC \
 -DLAPACKE_INCLUDE_DIRS=$MKL_INC \
 -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH \
 -DCBLAS_LIBRARIES=$TAMM_BLASLIBS \
--DLAPACKE_LIBRARIES=$TAMM_BLASLIBS ..
+-DLAPACKE_LIBRARIES=$TAMM_BLASLIBS \
+-DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 
 To enable CUDA build, add -DUSE_CUDA=ON
 
@@ -197,19 +217,19 @@ git clone https://github.com/spec-org/gfcc.git GFCC_SRC
 
 cd $GFCC_SRC/contrib/CMakeBuild
 mkdir build && cd build
-CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 make install
 
 cd $GFCC_SRC/contrib/TAMM
 mkdir build && cd build
-CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 make -j3 
 make install
 ctest (optional)
 
 cd $GFCC_SRC
 mkdir build && cd build
-CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 make -j2 install
 ```
 
@@ -229,18 +249,18 @@ git clone https://github.com/spec-org/gfcc.git GFCC_SRC
 
 cd $GFCC_SRC/contrib/CMakeBuild
 mkdir build && cd build
-CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 make install
 
 cd $GFCC_SRC/contrib/TAMM
 mkdir build && cd build
 // To enable CUDA build, add -DUSE_CUDA=ON
-CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 make -j3 install
 ctest (optional)
 
 cd $GFCC_SRC
 mkdir build && cd build
-CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH ..
+CC=gcc-8 CXX=g++-8 FC=gfortran-8 cmake -DCMAKE_INSTALL_PREFIX=$GFCC_INSTALL_PATH -DTAMM_DEPS_TAR_PATH=$TAMM_DEPS_TAR_PATH ..
 make -j2 install
 ```

@@ -1,8 +1,9 @@
 
 
 ExternalProject_Add(HPTT_External
-    GIT_REPOSITORY https://github.com/ajaypanyala/hptt.git
-    UPDATE_DISCONNECTED 1
+    # GIT_REPOSITORY https://github.com/ajaypanyala/hptt.git
+    # UPDATE_DISCONNECTED 1
+    URL ${TAMM_DEPS_TAR_PATH}/hptt-1.0.6.tar.gz
     CMAKE_ARGS ${DEPENDENCY_CMAKE_OPTIONS} -DENABLE_OPENMP=${USE_OPENMP}
     INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} install DESTDIR=${STAGE_DIR}
     CMAKE_CACHE_ARGS ${CORE_CMAKE_LISTS}

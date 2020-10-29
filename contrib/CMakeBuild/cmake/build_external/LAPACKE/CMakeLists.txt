@@ -20,8 +20,8 @@ endif()
 
 ExternalProject_Add(LAPACKE
         DOWNLOAD_NO_PROGRESS TRUE
-        URL ${LAPACKE_URL}
-        URL_MD5 ${LAPACKE_MD5}
+        URL ${TAMM_DEPS_TAR_PATH}/lapack-3.8.0.tar.gz
+        # URL_MD5 ${LAPACKE_MD5}
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE
                    -DUSE_OPTIMIZED_BLAS=OFF
                    -DUSE_OPTIMIZED_LAPACK=OFF

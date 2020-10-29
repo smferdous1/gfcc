@@ -24,6 +24,13 @@ function(build_nwchemex_module SUPER_PROJECT_ROOT)
     option_w_default(USE_GA_PROFILER OFF)
     option_w_default(CUDA_MAXREGCOUNT 64)
 
+    if(DEFINED TAMM_DEPS_TAR_PATH)
+        message(STATUS "TAMM_DEPS_TAR_PATH = ${TAMM_DEPS_TAR_PATH}")
+        bundle_cmake_strings(CORE_CMAKE_STRINGS TAMM_DEPS_TAR_PATH)
+    else()
+        message(FATAL_ERROR "Please provide the ")
+    endif()
+
     if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         if(NOT "${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Darwin")
             get_filename_component(__NWX_GCC_INSTALL_PREFIX "${CMAKE_Fortran_COMPILER}/../.." ABSOLUTE)

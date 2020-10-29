@@ -20,8 +20,8 @@ endif()
 set(STAGE_DIR ${CMAKE_BINARY_DIR}/stage)
 ExternalProject_Add(LAPACK
         DOWNLOAD_NO_PROGRESS TRUE
-        URL ${LAPACK_URL}
-        URL_MD5 ${LAPACK_MD5}
+        URL ${TAMM_DEPS_TAR_PATH}/lapack-3.8.0.tar.gz
+        # URL_MD5 ${LAPACK_MD5}
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE
                    -DUSE_OPTIMIZED_BLAS=ON
                    -DBLAS_LIBRARIES=${BLAS_LIBRARIES}

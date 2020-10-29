@@ -52,8 +52,8 @@ ExternalProject_Add(BLAS_External
         DOWNLOAD_NO_PROGRESS TRUE
         DOWNLOAD_DIR ${BLAS_DOWNLOAD}
         SOURCE_DIR ${BLAS_DOWNLOAD}/BLAS
-        URL ${BLAS_URL}
-        URL_MD5 ${BLAS_MD5}
+        URL ${TAMM_DEPS_TAR_PATH}/blas-3.8.0.tgz
+        # URL_MD5 ${BLAS_MD5}
         BINARY_DIR ${BLAS_SRC_DIR}
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E copy ${BLAS_MAKEFILE}
                                                    ${MAKEFILE_DEST}
