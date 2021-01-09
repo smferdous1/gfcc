@@ -226,7 +226,7 @@ class CCSDOptions: public Options {
     gf_restart     = false;
     gf_itriples    = false;
     ccsd_maxiter   = 50;
-    balance_tiles  = false;
+    balance_tiles  = true;
     profile_ccsd   = false;
     
     gf_p_oi_range        = 0; //1-number of occupied, 2-all MOs
