@@ -109,6 +109,55 @@ void iteration_print_lambda(const ProcGroup& pg, int iter, double residual, doub
   }
 }
 
+template<typename T>
+std::pair<double,double> rest_cs(ExecutionContext& ec,
+                              const TiledIndexSpace& MO,
+                              Tensor<T>& d_r1,
+                              Tensor<T>& d_r2,
+                              Tensor<T>& d_t1,
+                              Tensor<T>& d_t2,
+                              Tensor<T>& de,
+                              Tensor<T>& d_r1_residual,
+                              Tensor<T>& d_r2_residual,
+                              std::vector<T>& p_evl_sorted, T zshiftl, 
+                              const TAMM_SIZE& noa,
+                              const TAMM_SIZE& nva, 
+                              bool transpose=false) {
+
+    T residual, energy;
+    Scheduler sch{ec};
+    // Tensor<T> d_r1_residual{}, d_r2_residual{};
+    // Tensor<T>::allocate(&ec,d_r1_residual, d_r2_residual);
+    sch
+      (d_r1_residual() = d_r1()  * d_r1())
+      (d_r2_residual() = d_r2()  * d_r2())
+      .execute();
+
+      auto l0 = [&]() {
+        T r1 = get_scalar(d_r1_residual);
+        T r2 = get_scalar(d_r2_residual);
+        r1 = 0.5*std::sqrt(r1);
+        r2 = 0.5*std::sqrt(r2);
+        energy = get_scalar(de);
+        residual = std::max(r1,r2);
+      };
+
+      auto l1 =  [&]() {
+        jacobi_cs(ec, d_r1, d_t1, -1.0 * zshiftl, transpose, p_evl_sorted,noa,nva);
+      };
+      auto l2 = [&]() {
+        jacobi_cs(ec, d_r2, d_t2, -2.0 * zshiftl, transpose, p_evl_sorted,noa,nva);
+      };
+
+      l0();
+      l1();
+      l2();
+
+      // Tensor<T>::deallocate(d_r1_residual, d_r2_residual);
+      
+    return {residual, energy};
+}
+
 /**
  *
  * @tparam T

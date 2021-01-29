@@ -13,6 +13,7 @@ set(gfcc_INCLUDES
     contrib/hf_common.hpp          contrib/scf_guess.hpp
     contrib/hartree_fock_tamm.hpp  contrib/hf_tamm_common.hpp  
     contrib/input_parser.hpp       contrib/linalg.hpp contrib/molden.hpp
+    contrib/cd_ccsd_common_cs.hpp
    )
 
 set(gfcc_DEFINITIONS )

@@ -39,6 +39,7 @@ CCSD {
     gf_ip true
     gf_ngmres 10
     gf_maxiter 100
+    printtol 0.01
     //gf_nprocs_poi 2
     gf_damping_factor 1
     gf_p_oi_range 1

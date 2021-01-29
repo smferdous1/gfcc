@@ -228,6 +228,7 @@ class CCSDOptions: public Options {
     ccsd_maxiter   = 50;
     balance_tiles  = true;
     profile_ccsd   = false;
+    printtol       = 0.05; 
     
     gf_p_oi_range        = 0; //1-number of occupied, 2-all MOs
     gf_ndiis             = 10;
@@ -267,6 +268,7 @@ class CCSDOptions: public Options {
          gf_itriples, balance_tiles;
   bool   profile_ccsd;
   double lshift;
+  double printtol;
   double threshold;
   double eom_threshold;
   int    ccsd_maxiter;
@@ -310,6 +312,7 @@ class CCSDOptions: public Options {
     cout << " tilesize             = " << tilesize         << endl;
     cout << " ccsd_maxiter         = " << ccsd_maxiter     << endl;
     cout << " itilesize            = " << itilesize        << endl;
+    cout << " printtol             = " << printtol         << endl;
     if(lshift != 0) 
       cout << " lshift               = " << lshift           << endl;    
     if(gf_nprocs_poi > 0) 
@@ -716,6 +719,8 @@ std::tuple<Options, SCFOptions, CDOptions, CCSDOptions> read_nwx_file(std::istre
             ccsd_options.ccsd_maxiter = std::stoi(read_option(line)); 
           else if(is_in_line("lshift",line)) 
             ccsd_options.lshift = std::stod(read_option(line));                                      
+          else if(is_in_line("printtol",line)) 
+            ccsd_options.printtol = std::stod(read_option(line));             
           else if(is_in_line("eom_threshold",line)) 
             ccsd_options.eom_threshold = std::stod(read_option(line));              
           else if(is_in_line("threshold",line)) 

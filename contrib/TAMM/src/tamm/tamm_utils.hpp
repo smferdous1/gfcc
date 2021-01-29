@@ -96,6 +96,30 @@ void print_tensor(const Tensor<T>& tensor) {
 }
 
 template<typename T>
+void print_max_above_threshold(const Tensor<T>& tensor, double printtol=0.05) {
+    auto lt = tensor();
+    for(auto it : tensor.loop_nest()) {
+        auto blockid   = internal::translate_blockid(it, lt);
+        if(!tensor.is_non_zero(blockid)) continue;
+        TAMM_SIZE size = tensor.block_size(blockid);
+        std::vector<T> buf(size);
+        tensor.get(blockid, buf);
+        auto bdims = tensor.block_dims(blockid);
+        
+        for(TAMM_SIZE i = 0; i < size; i++) {
+            if constexpr(tamm::internal::is_complex_v<T>) {
+                 if(std::fabs(buf[i].real()) > printtol)
+                    std::cout << buf[i] << std::endl;
+            } else {
+               if(std::fabs(buf[i]) > printtol)
+                    std::cout << buf[i] << std::endl;
+            }
+        }
+        std::cout << std::endl;
+    }
+}
+
+template<typename T>
 void print_tensor_all(Tensor<T>& t) {
     for(auto it : t.loop_nest()) {
         TAMM_SIZE size = t.block_size(it);
