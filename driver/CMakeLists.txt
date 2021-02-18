@@ -6,7 +6,7 @@ include(TargetMacros)
 include_directories(${CMAKE_SOURCE_DIR}/..)
 include_directories(${CMAKE_SOURCE_DIR}/../src)
 add_mpi_unit_test(CCSD_CS 2 "${CMAKE_SOURCE_DIR}/../inputs/co.nwx")
-# add_mpi_unit_test(GF_CCSD 2 "${CMAKE_SOURCE_DIR}/../inputs/co.nwx")
+add_mpi_unit_test(GF_CCSD 2 "${CMAKE_SOURCE_DIR}/../inputs/co.nwx")
 
 
 
