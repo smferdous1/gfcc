@@ -4,42 +4,16 @@
 
 #include <cctype>
 
-// Eigen matrix algebra library
-#include <Eigen/Dense>
-#include <Eigen/Eigenvalues>
-// #include <unsupported/Eigen/CXX11/Tensor>
-#include <unsupported/Eigen/MatrixFunctions>
-#undef I
-
-#include "molden.hpp"
-
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-#include "tamm/eigen_utils.hpp"
 #include "tamm/tamm.hpp"
 #include "macdecls.h"
 #include "ga-mpi.h"
 
-// #define EIGEN_DIAG 
-// #ifndef SCALAPACK
-  #include "linalg.hpp"
-#ifdef SCALAPACK
-  // CXXBLACS BLACS/ScaLAPACK wrapper
-  // #include LAPACKE_HEADER
-  // #define CXXBLACS_HAS_LAPACK
-  #define CB_INT TAMM_LAPACK_INT
-  #define CXXBLACS_LAPACK_Complex16 TAMM_LAPACK_COMPLEX16
-  #define CXXBLACS_LAPACK_Complex8 TAMM_LAPACK_COMPLEX8
-  #include <cxxblacs.hpp>
-//std::unique_ptr<CXXBLACS::BlacsGrid> blacs_grid;
-#endif
-#undef I 
+#include "tamm/eigen_utils.hpp"
 
-#include "utils/external/nlohmann/json.hpp"
-using json = nlohmann::json;
-
-#include <filesystem>
+#include "misc.hpp"
+#include "molden.hpp"
+#include "linalg.hpp"
+#include "json_data.hpp"
 
 using namespace tamm;
 using std::cerr;
@@ -50,12 +24,6 @@ using libint2::Atom;
 
 using TensorType = double;
 const auto max_engine_precision = std::numeric_limits<double>::epsilon() / 1e10;
-
-using Matrix   = Eigen::Matrix<TensorType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-using Tensor1D = Eigen::Tensor<TensorType, 1, Eigen::RowMajor>;
-using Tensor2D = Eigen::Tensor<TensorType, 2, Eigen::RowMajor>;
-using Tensor3D = Eigen::Tensor<TensorType, 3, Eigen::RowMajor>;
-using Tensor4D = Eigen::Tensor<TensorType, 4, Eigen::RowMajor>;
 
 using shellpair_list_t = std::unordered_map<size_t, std::vector<size_t>>;
 shellpair_list_t obs_shellpair_list;  // shellpair list for OBS
@@ -75,10 +43,12 @@ int iediis  = 0;
 bool switch_diis=false;
 
 //AO
-tamm::TiledIndexSpace tAO, tAOt;
+int final_AO_tilesize;
+tamm::TiledIndexSpace tAO, tAOt; //tAO_ld
 std::vector<tamm::Tile> AO_tiles;
 std::vector<tamm::Tile> AO_opttiles;
 std::vector<size_t> shell_tile_map;
+// tamm::TiledIndexLabel mu_ld, nu_ld;
 tamm::TiledIndexLabel mu, nu, ku;
 tamm::TiledIndexLabel mup, nup, kup;
 
@@ -97,10 +67,11 @@ tamm::TiledIndexSpace tdfCocc;
 tamm::TiledIndexLabel dCocc_til;
 
 struct EigenTensors {
-  Matrix H,S;
-  Matrix C,G,D,F,X;
-  Matrix C_occ;
-  Matrix C_beta,G_beta,D_beta,F_beta,X_beta;
+  // Matrix H,S;
+  Matrix F,C,C_occ,X; //only rank 0 allocates F{a,b}, C_occ, C{a,b}, X{a,b}
+  Matrix F_beta,C_beta,X_beta;
+  Matrix G,D;
+  Matrix G_beta,D_beta;
 };
 
 struct TAMMTensors {
@@ -141,164 +112,9 @@ struct TAMMTensors {
 
     //DF
     Tensor<TensorType> xyK_tamm; //n,n,ndf
-    Tensor<TensorType> C_occ_tamm; //n,nocc     
+    Tensor<TensorType> C_occ_tamm; //n,nocc
+    Tensor<TensorType> Zxy_tamm; //ndf,n,n  
 };
-
-struct SystemData {
-  OptionsMap options_map;  
-  int  n_occ_alpha;
-  int  n_vir_alpha;
-  int  n_occ_beta;
-  int  n_vir_beta;
-  int  n_lindep;
-  int  nbf;
-  int  nbf_orig;
-  int  nelectrons;
-  int  nelectrons_alpha;
-  int  nelectrons_beta;  
-  int  n_frozen_core;
-  int  n_frozen_virtual;
-  int  nmo;
-  int  nocc;
-  int  nvir;
-  int  focc;
-  bool ediis;
-
-  enum SCFType { uhf, rhf, rohf };
-  SCFType scf_type; //1-rhf, 2-uhf, 3-rohf
-  std::string scf_type_string; 
-  std::string input_molecule;
-  std::string output_file_prefix;
-
-  //output data
-  double scf_energy;
-  int scf_iterations;
-  int num_chol_vectors;
-  int ccsd_iterations;
-  double ccsd_corr_energy;
-  double ccsd_total_energy;
-
-  void print() {
-    std::cout << std::endl << "----------------------------" << std::endl;
-    std::cout << "scf_type = " << scf_type_string << std::endl;
-
-    std::cout << "nbf = " << nbf << std::endl;
-    std::cout << "nbf_orig = " << nbf_orig << std::endl;
-    std::cout << "n_lindep = " << n_lindep << std::endl;
-    
-    std::cout << "focc = " << focc << std::endl;        
-    std::cout << "nmo = " << nmo << std::endl;
-    std::cout << "nocc = " << nocc << std::endl;
-    std::cout << "nvir = " << nvir << std::endl;
-    
-    std::cout << "n_occ_alpha = " << n_occ_alpha << std::endl;
-    std::cout << "n_vir_alpha = " << n_vir_alpha << std::endl;
-    std::cout << "n_occ_beta = " << n_occ_beta << std::endl;
-    std::cout << "n_vir_beta = " << n_vir_beta << std::endl;
-    
-    std::cout << "nelectrons = " << nelectrons << std::endl;
-    std::cout << "nelectrons_alpha = " << nelectrons_alpha << std::endl;
-    std::cout << "nelectrons_beta = " << nelectrons_beta << std::endl;  
-    std::cout << "n_frozen_core = " << n_frozen_core << std::endl;
-    std::cout << "n_frozen_virtual = " << n_frozen_virtual << std::endl;
-    std::cout << "num_chol_vectors = " << num_chol_vectors << std::endl;
-    std::cout << "----------------------------" << std::endl;
-  }
-
-  void update() {
-      n_frozen_core = 0;
-      n_frozen_virtual = 0;
-      EXPECTS(nbf == n_occ_alpha + n_vir_alpha); //lin-deps
-      EXPECTS(nbf_orig == n_occ_alpha + n_vir_alpha + n_lindep);      
-      nocc = n_occ_alpha + n_occ_beta;
-      nvir = n_vir_alpha + n_vir_beta;
-      EXPECTS(nelectrons == n_occ_alpha + n_occ_beta);
-      EXPECTS(nelectrons == nelectrons_alpha+nelectrons_beta);
-      nmo = n_occ_alpha + n_vir_alpha + n_occ_beta + n_vir_beta; //lin-deps
-  }
-
-  SystemData(OptionsMap options_map_, const std::string scf_type_string)
-    : options_map(options_map_), scf_type_string(scf_type_string) {
-      scf_type = SCFType::rhf;
-      if(scf_type_string == "uhf")       { focc = 1; scf_type = SCFType::uhf; }
-      else if(scf_type_string == "rhf")  { focc = 2; scf_type = SCFType::rhf; }
-      else if(scf_type_string == "rohf") { focc = -1; scf_type = SCFType::rohf; }
-    }
-
-};
-
-void write_results(SystemData sys_data, const std::string module){
-  auto options = sys_data.options_map;
-  auto scf = options.scf_options;
-  auto cd = options.cd_options;
-  auto ccsd = options.ccsd_options;
-  std::string l_module = module;
-  to_lower(l_module);
-  std::string json_file = sys_data.input_molecule+"."+l_module+".json";
-  bool json_exists = std::filesystem::exists(json_file);
-
-  json results =  json::object();
-
-  if(json_exists){
-    // std::ifstream jread(json_file);
-    // jread >> results;
-    std::filesystem::remove(json_file);
-  }
-  
-  auto str_bool = [=] (const bool val) {
-    if (val) return "true";
-    return "false";
-  };
-
-  results["input"]["molecule"]["name"] = sys_data.input_molecule;
-  results["input"]["molecule"]["basis"] = scf.basis;
-  results["input"]["molecule"]["basis_sphcart"] = scf.sphcart;
-  results["input"]["molecule"]["geometry_units"] = scf.geom_units;
-  //SCF options
-  results["input"]["SCF"]["tol_int"] = scf.tol_int;
-  results["input"]["SCF"]["tol_lindep"] = scf.tol_lindep;
-  results["input"]["SCF"]["conve"] = scf.conve;
-  results["input"]["SCF"]["convd"] = scf.convd;
-  results["input"]["SCF"]["diis_hist"] = scf.diis_hist;
-  results["input"]["SCF"]["AO_tilesize"] = scf.AO_tilesize;
-  results["input"]["SCF"]["force_tilesize"] = str_bool(scf.force_tilesize);
-  results["input"]["SCF"]["scf_type"] = scf.scf_type;
-  results["input"]["SCF"]["multiplicity"] = scf.multiplicity;
-
-  //SCF output
-  results["output"]["SCF"]["energy"] = sys_data.scf_energy;
-  results["output"]["SCF"]["n_iterations"] = sys_data.scf_iterations;
-
-  if(module == "CD" || module == "CCSD"){
-    //CD options
-    results["input"]["CD"]["diagtol"] = cd.diagtol;
-    results["input"]["CD"]["max_cvecs_factor"] = cd.max_cvecs_factor;
-    //CD output
-    results["output"]["CD"]["n_cholesky_vectors"] = sys_data.num_chol_vectors;
-  }
-
-  if(module == "CCSD") {
-    //CCSD options
-    results["input"]["CCSD"]["threshold"] = ccsd.threshold;
-    results["input"]["CCSD"]["tilesize"] = ccsd.tilesize;
-    results["input"]["CCSD"]["itilesize"] = ccsd.itilesize;
-    results["input"]["CCSD"]["ncuda"] = ccsd.icuda;
-    results["input"]["CCSD"]["ndiis"] = ccsd.ndiis;
-    results["input"]["CCSD"]["readt"] = str_bool(ccsd.readt);
-    results["input"]["CCSD"]["writet"] = str_bool(ccsd.writet);
-    results["input"]["CCSD"]["ccsd_maxiter"] = ccsd.ccsd_maxiter;
-    results["input"]["CCSD"]["balance_tiles"] = str_bool(ccsd.balance_tiles);
-  
-    //CCSD output
-    results["output"]["CCSD"]["n_iterations"] =   sys_data.ccsd_iterations;
-    results["output"]["CCSD"]["energy"]["correlation"] =  sys_data.ccsd_corr_energy;
-    results["output"]["CCSD"]["energy"]["total"] =  sys_data.ccsd_total_energy;
-  }
-  
-  // std::cout << std::endl << std::endl << results.dump() << std::endl;
-  std::ofstream res_file(json_file);
-  res_file << std::setw(4) << results << std::endl;
-}
 
 //DENSITY FITTING
 struct DFFockEngine {
@@ -385,37 +201,135 @@ std::vector<size_t> map_basis_function_to_shell(
     return result;
 }
 
-void writeC(Matrix& C, std::string scf_files_prefix){
-  std::string outputfile = scf_files_prefix + ".movecs";
-  const auto N = C.rows();
-  const auto Northo = C.cols();
-  std::vector<TensorType> Cbuf(N*Northo);
-  TensorType *buf = Cbuf.data();
-  Eigen::Map<Matrix>(buf,N,Northo) = C;  
-  std::ofstream out(outputfile, std::ios::out | std::ios::binary);
-  if(!out) {
-    cerr << "ERROR: Cannot open file " << outputfile << endl;
-    return;
-  }
+BasisSetMap construct_basisset_maps(std::vector<libint2::Atom>& atoms, libint2::BasisSet& shells) {
 
-  out.write((char *)(buf), sizeof(TensorType) *N*Northo);
-  out.close();
+    BasisSetMap bsm;
+
+    auto a2s_map = shells.atom2shell(atoms);
+    size_t natoms = atoms.size();
+    size_t nshells = shells.size();
+    auto nbf = nbasis(shells);
+
+    std::vector<long> shell2atom_map = shells.shell2atom(atoms);
+    auto bf2shell = map_basis_function_to_shell(shells);
+    auto shell2bf = map_shell_to_basis_function(shells);
+
+    std::vector<AtomInfo> atominfo(natoms);
+    std::vector<size_t> bf2atom(nbf);
+    std::vector<size_t> nbf_atom(natoms);
+    std::vector<size_t> nshells_atom(natoms);
+    std::vector<size_t> first_bf_atom(natoms);
+    std::vector<size_t> first_bf_shell(nshells);
+    std::vector<size_t> first_shell_atom(natoms);
+
+    for(size_t s1 = 0; s1 != nshells; ++s1) first_bf_shell[s1] = shells[s1].size();
+
+    for (size_t ai = 0; ai < natoms; ai++) {
+      auto nshells_ai = a2s_map[ai].size();
+      auto first = a2s_map[ai][0];
+      auto last = a2s_map[ai][nshells_ai - 1];
+      std::vector<libint2::Shell> atom_shells(nshells_ai);
+      int as_index = 0;
+      size_t atom_nbf = 0;
+      first_shell_atom[ai] = first;
+      for (auto si = first; si <= last; si++) {
+        atom_shells[as_index] = shells[si];
+        as_index++;
+        atom_nbf += shells[si].size();
+      }
+      atominfo[ai].atomic_number = atoms[ai].atomic_number;
+      atominfo[ai].shells = atom_shells;
+      atominfo[ai].nbf = atom_nbf;
+      atominfo[ai].nbf_lo = 0;
+      atominfo[ai].nbf_hi = atom_nbf;
+      if (ai > 0) {
+        atominfo[ai].nbf_lo = atominfo[ai - 1].nbf_hi;
+        atominfo[ai].nbf_hi = atominfo[ai].nbf_lo + atom_nbf;
+      }
+      
+      nbf_atom[ai] = atom_nbf;
+      nshells_atom[ai] = nshells_ai;
+      first_bf_atom[ai] = atominfo[ai].nbf_lo;
+      for(auto nlo = atominfo[ai].nbf_lo; nlo<atominfo[ai].nbf_hi; nlo++) bf2atom[nlo] = ai;
+    }
+
+    bsm.nbf = nbf;
+    bsm.natoms = natoms;
+    bsm.nshells = nshells;
+    bsm.atominfo = atominfo;
+    bsm.bf2shell = bf2shell;
+    bsm.shell2bf = shell2bf;
+    bsm.bf2atom = bf2atom;
+    bsm.nbf_atom = nbf_atom;
+    bsm.atom2shell = a2s_map;
+    bsm.nshells_atom = nshells_atom;
+    bsm.first_bf_atom = first_bf_atom;
+    bsm.first_bf_shell = first_bf_shell;
+    bsm.shell2atom = shell2atom_map;
+    bsm.first_shell_atom = first_shell_atom;
+
+    return bsm;
+
 }
 
-void writeD(Matrix& D, std::string scf_files_prefix){
-  std::string outputfile = scf_files_prefix + ".density";
-  const auto N = D.rows();
-  std::vector<TensorType> Dbuf(N*N);
-  TensorType *buf = Dbuf.data();
-  Eigen::Map<Matrix>(buf,N,N) = D;  
-  std::ofstream out(outputfile, std::ios::out | std::ios::binary);
-  if(!out) {
-    cerr << "ERROR: Cannot open file " << outputfile << endl;
-    return;
-  }
+template<typename T>
+Matrix read_scf_mat(std::string matfile) {
 
-  out.write((char *)(buf), sizeof(TensorType) *N*N);
-  out.close();
+  std::string mname = fs::path(matfile).extension();
+  mname.erase(0, 1); //remove "."
+  
+  auto mfile_id = H5Fopen(matfile.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+
+  // Read attributes - reduced dims
+  std::vector<int64_t> rdims(2);
+  auto attr_dataset = H5Dopen(mfile_id, "rdims",  H5P_DEFAULT);
+  H5Dread(attr_dataset, H5T_NATIVE_INT64, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdims.data());
+
+  Matrix mat = Matrix::Zero(rdims[0],rdims[1]);
+  auto mdataset_id = H5Dopen(mfile_id, mname.c_str(),  H5P_DEFAULT);
+
+   /* Read the datasets. */
+  H5Dread(mdataset_id, get_hdf5_dt<T>(), H5S_ALL, H5S_ALL, H5P_DEFAULT, mat.data());
+
+  H5Dclose(attr_dataset);
+  H5Dclose(mdataset_id);
+  H5Fclose(mfile_id);
+
+  return mat;
+}
+
+template<typename T>
+void write_scf_mat(Matrix& C, std::string matfile){
+  std::string mname = fs::path(matfile).extension();
+  mname.erase(0, 1); //remove "."
+
+  const auto N = C.rows();
+  const auto Northo = C.cols();
+  TensorType *buf = C.data();
+
+  /* Create a file. */
+  hid_t file_id = H5Fcreate(matfile.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+  hsize_t tsize = N*Northo;
+  hid_t dataspace_id = H5Screate_simple(1, &tsize, NULL);
+
+  /* Create dataset. */
+  hid_t dataset_id = H5Dcreate(file_id, mname.c_str(), get_hdf5_dt<T>(), dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  /* Write the dataset. */
+  /* herr_t status = */ H5Dwrite(dataset_id, get_hdf5_dt<T>(), H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);   
+
+  /* Create and write attribute information - dims */
+  std::vector<int64_t> rdims{N,Northo};
+  hsize_t attr_size = rdims.size();
+  auto attr_dataspace = H5Screate_simple(1, &attr_size, NULL);
+  auto attr_dataset = H5Dcreate(file_id, "rdims", H5T_NATIVE_INT64, attr_dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  H5Dwrite(attr_dataset, H5T_NATIVE_INT64, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdims.data());
+  H5Dclose(attr_dataset);
+  H5Sclose(attr_dataspace);
+
+  H5Dclose(dataset_id);
+  H5Sclose(dataspace_id);
+  H5Fclose(file_id);
 }
 
 template<typename T>
@@ -470,8 +384,11 @@ void t2e_hf_helper(const ExecutionContext& ec, tamm::Tensor<T>& ttensor,Matrix& 
 //
 // A is conditioned to max_condition_number
 std::tuple<Matrix, Matrix, size_t, double, double, int64_t> gensqrtinv(
-    const ExecutionContext& ec, const Matrix& S, bool symmetric = false,
+    ExecutionContext& ec, tamm::Tensor<double> S, bool symmetric = false,
     double threshold=1e-5) {
+
+  using T = double;
+
 #ifdef SCALAPACK
   Eigen::SelfAdjointEigenSolver<Matrix> eig_solver(S);
   auto U = eig_solver.eigenvectors();
@@ -514,68 +431,75 @@ std::tuple<Matrix, Matrix, size_t, double, double, int64_t> gensqrtinv(
   double condition_number, result_condition_number;
   Matrix X, Xinv;
 
-  const int64_t N = S.rows();
+  const int64_t N = S.tiled_index_spaces()[0].index_space().num_indices(); //S.rows();
   int64_t n_illcond = 0;
 
   if( world_rank == 0 ) {
+    // Eigendecompose S -> VsV**T
+    Matrix V(N,N);
+    tamm_to_eigen_tensor(S,V);
+    T* Vbuf = V.data();
 
-  // Eigendecompose S -> VsV**T
-  Eigen::MatrixXd V = S;
-  std::vector<double> s(N);
-  linalg::lapack::syevd( 'V', 'L', N, V.data(), N, s.data() );
+    std::vector<double> s(N);
+    linalg::lapack::syevd( 'V', 'L', N, Vbuf, N, s.data() );
 
-  // condition_number = std::min(
-  //   s.back() / std::max( s.front(), std::numeric_limits<double>::min() ),
-  //   1.       / std::numeric_limits<double>::epsilon()
-  // );
+    // condition_number = std::min(
+    //   s.back() / std::max( s.front(), std::numeric_limits<double>::min() ),
+    //   1.       / std::numeric_limits<double>::epsilon()
+    // );
 
-  // const auto threshold = s.back() / max_condition_number;
-  auto first_above_thresh = std::find_if( s.begin(), s.end(), [&](const auto& x){ return x >= threshold; } );
-  result_condition_number = s.back() / *first_above_thresh;
+    // const auto threshold = s.back() / max_condition_number;
+    auto first_above_thresh = std::find_if( s.begin(), s.end(), [&](const auto& x){ return x >= threshold; } );
+    result_condition_number = s.back() / *first_above_thresh;
 
-  n_illcond = std::distance( s.begin(), first_above_thresh );
-  n_cond    = N - n_illcond;
+    n_illcond = std::distance( s.begin(), first_above_thresh );
+    n_cond    = N - n_illcond;
 
-  if(n_illcond > 0) {
-    std::cout << std::endl << "WARNING: Found " << n_illcond << " linear dependencies" << std::endl;
-    cout << "First eigen value above tol_lindep = " << *first_above_thresh << endl;
-    std::cout << "The overlap matrix has " << n_illcond << " vectors deemed linearly dependent with eigenvalues:" << std::endl;
-    
-    for( int64_t i = 0; i < n_illcond; i++ ) cout << std::defaultfloat << i+1 << ": " << s[i] << endl;
-  }
+    if(n_illcond > 0) {
+      std::cout << std::endl << "WARNING: Found " << n_illcond << " linear dependencies" << std::endl;
+      cout << "First eigen value above tol_lindep = " << *first_above_thresh << endl;
+      std::cout << "The overlap matrix has " << n_illcond << " vectors deemed linearly dependent with eigenvalues:" << std::endl;
+      
+      for( int64_t i = 0; i < n_illcond; i++ ) cout << std::defaultfloat << i+1 << ": " << s[i] << endl;
+    }
 
-  auto* V_cond = V.data() + n_illcond * N;
-  X.resize( N, n_cond ); Xinv.resize( N, n_cond );
-  // X.setZero(N,N); Xinv.setZero( N, N );
+    // auto* V_cond = Vbuf + n_illcond * N;
+    Matrix V_cond = V.block(n_illcond, 0, N-n_illcond, N);
+    V.resize(0,0);
+    X.resize( N, n_cond ); // Xinv.resize( N, n_cond );
+    // X.setZero(N,N); Xinv.setZero( N, N );
+    // Matrix V_cond(n_cond,N);
+    // V_cond = Eigen::Map<Matrix>(Vbuf + n_illcond * N,n_cond,N);
+    X = V_cond.transpose();
+    // Xinv = X;
+    V_cond.resize(0,0);
 
-  // Form canonical X/Xinv
-  for( auto i = 0; i < n_cond; ++i ) {
+    // Form canonical X/Xinv
+    for( auto i = 0; i < n_cond; ++i ) {
 
-    const double srt = std::sqrt( *(first_above_thresh + i) );
+      const double srt = std::sqrt( *(first_above_thresh + i) );
 
-    // X is row major...
-    auto* X_col    = X.data()    + i;
-    auto* Xinv_col = Xinv.data() + i;
+      // X is row major...
+      auto* X_col    = X.data()    + i;
+      // auto* Xinv_col = Xinv.data() + i;
 
-    linalg::blas::copy( N, V_cond + i*N, 1, X_col,    n_cond );
-    linalg::blas::copy( N, V_cond + i*N, 1, Xinv_col, n_cond );
-    linalg::blas::scal( N, 1./srt, X_col,    n_cond );
-    linalg::blas::scal( N, srt,    Xinv_col, n_cond );
+      linalg::blas::scal( N, 1./srt, X_col,    n_cond );
+      // linalg::blas::scal( N, srt,    Xinv_col, n_cond );
 
-  }  
+    }  
 
-  if( symmetric ) {
+    if( symmetric ) {
 
-    assert( not symmetric );
+      assert( not symmetric );
 
-/*
-    // X is row major, thus we need to form X**T = V_cond * X**T
-    Matrix TMP = X;
-    X.resize( N, N );
-    linalg::blas::gemm( 'N', 'N', N, N, n_cond, 1., V_cond, N, TMP.data(), n_cond, 0., X.data(), N );
-*/
+  /*
+      // X is row major, thus we need to form X**T = V_cond * X**T
+      Matrix TMP = X;
+      X.resize( N, N );
+      linalg::blas::gemm( 'N', 'N', N, N, n_cond, 1., V_cond, N, TMP.data(), n_cond, 0., X.data(), N );
+  */
 
-  }
+    }
   } // compute on root 
 
 
@@ -587,14 +511,17 @@ std::tuple<Matrix, Matrix, size_t, double, double, int64_t> gensqrtinv(
     MPI_Bcast( &condition_number,        1, MPI_DOUBLE,  0, world );
     MPI_Bcast( &result_condition_number, 1, MPI_DOUBLE,  0, world );
 
-    if( world_rank != 0 ) {
-      X.resize( N, n_cond ); Xinv.resize(N, n_cond);
-      // X.setZero(N,N); Xinv.setZero(N,N);
-    }
+    // if( world_rank != 0 ) {
+    //   X.resize( N, n_cond ); //Xinv.resize(N, n_cond);
+    //   // X.setZero(N,N); Xinv.setZero(N,N);
+    // }
 
-    MPI_Bcast( X.data(),    X.size(),    MPI_DOUBLE, 0, world );
-    MPI_Bcast( Xinv.data(), Xinv.size(), MPI_DOUBLE, 0, world );
+    // MPI_Bcast( X.data(),    X.size(),    MPI_DOUBLE, 0, world );
+    // MPI_Bcast( Xinv.data(), Xinv.size(), MPI_DOUBLE, 0, world );
   }
+
+  // tAO_ld = TiledIndexSpace{IndexSpace(range(0, n_cond)), final_AO_tilesize};
+  // Tensor<T> X{tAO, tAO_ld};
 
 #endif
   return std::make_tuple(X, Xinv, size_t(n_cond), condition_number,
@@ -602,7 +529,7 @@ std::tuple<Matrix, Matrix, size_t, double, double, int64_t> gensqrtinv(
 }
 
 std::tuple<Matrix, Matrix, double> conditioning_orthogonalizer(
-  const ExecutionContext& ec, SystemData& sys_data, const Matrix& S) {
+  ExecutionContext& ec, SystemData& sys_data, tamm::Tensor<double> S) {
   size_t obs_rank;
   double S_condition_number;
   double XtX_condition_number;
@@ -610,11 +537,11 @@ std::tuple<Matrix, Matrix, double> conditioning_orthogonalizer(
   int64_t n_illcond;
   double S_condition_number_threshold = sys_data.options_map.scf_options.tol_lindep;
 
-  assert(S.rows() == S.cols());
+  // assert(S.rows() == S.cols());
 
   std::tie(X, Xinv, obs_rank, S_condition_number, XtX_condition_number, n_illcond) =
       gensqrtinv(ec, S, false, S_condition_number_threshold);
-  auto obs_nbf_omitted = (long)S.rows() - (long)obs_rank;
+  auto obs_nbf_omitted = (long)(S.tiled_index_spaces()[0].index_space().num_indices()) - (long)obs_rank;
   // std::cout << "overlap condition number = " << S_condition_number;
   // if (obs_nbf_omitted > 0){
   //   if(GA_Nodeid()==0) std::cout << " (dropped " << obs_nbf_omitted << " "
@@ -623,12 +550,13 @@ std::tuple<Matrix, Matrix, double> conditioning_orthogonalizer(
   // }
   // if(GA_Nodeid()==0) std::cout << endl;
 
-  if (obs_nbf_omitted > 0) {
-    Matrix should_be_I = X.transpose() * S * X;
-    Matrix I = Matrix::Identity(should_be_I.rows(), should_be_I.cols());
-    if(ec.pg().rank()==0) std::cout << std::endl << "||X^t * S * X - I||_2 = " << (should_be_I - I).norm()
-              << " (should be 0)" << endl;
-  }
+  // FIXME:UNCOMMENT
+  // if (obs_nbf_omitted > 0) {
+  //   Matrix should_be_I = X.transpose() * S * X;
+  //   Matrix I = Matrix::Identity(should_be_I.rows(), should_be_I.cols());
+  //   if(ec.pg().rank()==0) std::cout << std::endl << "||X^t * S * X - I||_2 = " << (should_be_I - I).norm()
+  //             << " (should be 0)" << endl;
+  // }
 
   sys_data.n_lindep = n_illcond;
 

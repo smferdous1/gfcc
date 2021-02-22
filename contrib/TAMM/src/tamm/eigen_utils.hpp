@@ -2,9 +2,17 @@
 #define TAMM_EIGEN_UTILS_HPP_
 
 // Eigen matrix algebra library
+#include "tamm/tamm.hpp"
 #include <Eigen/Dense>
 #include <unsupported/Eigen/CXX11/Tensor>
-#include "tamm/tamm.hpp"
+#undef I
+
+using EigenTensorType=double;
+using Matrix   = Eigen::Matrix<EigenTensorType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+using Tensor1D = Eigen::Tensor<EigenTensorType, 1, Eigen::RowMajor>;
+using Tensor2D = Eigen::Tensor<EigenTensorType, 2, Eigen::RowMajor>;
+using Tensor3D = Eigen::Tensor<EigenTensorType, 3, Eigen::RowMajor>;
+using Tensor4D = Eigen::Tensor<EigenTensorType, 4, Eigen::RowMajor>;
 
 namespace tamm {
 

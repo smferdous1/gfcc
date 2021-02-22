@@ -754,7 +754,7 @@ void gfccsd_driver_ip_a(ExecutionContext& gec, ExecutionContext& sub_ec, MPI_Com
     
     if(!gf_conv && root_ppi==0) {
       std::string error_string = gfo.str()+","+std::to_string(pi)+".";
-      nwx_terminate("ERROR: GF-CCSD does not converge for w,oi = "+error_string);
+      tamm_terminate("ERROR: GF-CCSD does not converge for w,oi = "+error_string);
     }      
 
     auto gf_t2 = std::chrono::high_resolution_clock::now();
@@ -891,9 +891,10 @@ void gfccsd_main_driver(std::string filename) {
         && fs::exists(f1file) && fs::exists(v2file)) );
 
     //deallocates F_AO, C_AO
-    auto [cholVpr,d_f1,chol_count, max_cvecs, CI] = cd_svd_ga_driver<T>
+    auto [cholVpr,d_f1,lcao,chol_count, max_cvecs, CI] = cd_svd_ga_driver<T>
                         (sys_data, ec, MO, AO_opt, C_AO, F_AO, C_beta_AO, F_beta_AO, shells, shell_tile_map,
                                 ccsd_restart, cholfile);
+    free_tensors(lcao);
 
     TiledIndexSpace N = MO("all");
 
@@ -1687,7 +1688,7 @@ void gfccsd_main_driver(std::string filename) {
                 read_from_disk(q2_tmp_bab,x2_bab_wpi_file);  
               }
               else {
-                nwx_terminate("ERROR: At least one of " + x1_a_wpi_file + " and " + x2_aaa_wpi_file + " and " + x2_bab_wpi_file + " do not exist!");
+                tamm_terminate("ERROR: At least one of " + x1_a_wpi_file + " and " + x2_aaa_wpi_file + " and " + x2_bab_wpi_file + " do not exist!");
               }
   
               if(ivec>0){
@@ -2060,7 +2061,7 @@ void gfccsd_main_driver(std::string filename) {
                     cout << omega_extra_finished << endl;
                   }
                   //TODO: deallocate all tensors
-                  nwx_terminate("GFCCSD-MOR: Need higher resolution or different frequency region!");
+                  tamm_terminate("GFCCSD-MOR: Need higher resolution or different frequency region!");
                 }
                 omega_extra.push_back(Win);
   

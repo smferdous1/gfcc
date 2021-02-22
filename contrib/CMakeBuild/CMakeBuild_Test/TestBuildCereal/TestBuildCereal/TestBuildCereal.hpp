@@ -1,3 +1,0 @@
-struct TestBuildCereal {
-    bool passed();
-};

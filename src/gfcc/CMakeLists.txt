@@ -7,19 +7,21 @@ set(gfcc_SRCS gf_ccsd.cpp)
 
 #Add the current directory's header files to the list
 set(gfcc_INCLUDES
-    gf_ccsd.hpp  gf_guess.hpp gfccsd_ip.hpp
+    gf_ccsd.hpp  gf_guess.hpp      gfccsd_ip.hpp
     contrib/ccsd_util.hpp          contrib/cd_svd_ga.hpp  
     contrib/cd_ccsd_common.hpp     contrib/diis.hpp       
     contrib/hf_common.hpp          contrib/scf_guess.hpp
     contrib/hartree_fock_tamm.hpp  contrib/hf_tamm_common.hpp  
+    contrib/json_data.hpp          contrib/misc.hpp  
+    contrib/cd_ccsd_common_cs.hpp  contrib/two_index_transform.hpp
     contrib/input_parser.hpp       contrib/linalg.hpp contrib/molden.hpp
-    contrib/cd_ccsd_common_cs.hpp
    )
 
 set(gfcc_DEFINITIONS )
 set(gfcc_LFLAGS )
 
-nwchemex_add_library(gfcc gfcc_SRCS gfcc_INCLUDES gfcc_DEFINTIONS gfcc_LFLAGS)
+cmsb_add_library(gfcc gfcc_SRCS gfcc_INCLUDES gfcc_DEFINTIONS gfcc_LFLAGS)
 target_include_directories(gfcc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+target_include_directories(gfcc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../utils/external)
 
 

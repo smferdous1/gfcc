@@ -1,28 +1,19 @@
-#ifndef TESTS_CCSD_UTIL_HPP_
-#define TESTS_CCSD_UTIL_HPP_
+#ifndef TAMM_CCSD_UTIL_HPP_
+#define TAMM_CCSD_UTIL_HPP_
 
+// #include "cd_svd.hpp"
 #include "cd_svd_ga.hpp"
+#include "two_index_transform.hpp"
 #include "macdecls.h"
 #include "ga-mpi.h"
 
-
 using namespace tamm;
-using Tensor2D   = Eigen::Tensor<double, 2, Eigen::RowMajor>;
-using Tensor3D   = Eigen::Tensor<double, 3, Eigen::RowMajor>;
-using Tensor4D   = Eigen::Tensor<double, 4, Eigen::RowMajor>;
-
 
   // auto lambdar2 = [](const IndexVector& blockid, span<double> buf){
   //     if((blockid[0] > blockid[1]) || (blockid[2] > blockid[3])) {
   //         for(auto i = 0U; i < buf.size(); i++) buf[i] = 0; 
   //     }
   // };
-
-std::string getfilename(std::string filename){
-  size_t lastindex = filename.find_last_of(".");
-  auto fname = filename.substr(0,lastindex);
-  return fname.substr(fname.find_last_of("/")+1,fname.length());
-}
 
 template<typename TensorType>
 void update_r2(ExecutionContext& ec, 
@@ -87,7 +78,7 @@ std::string ccsd_test( int argc, char* argv[] )
     return filename;
 }
 
-void iteration_print(const ProcGroup& pg, int iter, double residual, double energy, double time) {
+void iteration_print(SystemData& sys_data, const ProcGroup& pg, int iter, double residual, double energy, double time) {
   if(pg.rank() == 0) {
     std::cout.width(6); std::cout << std::right << iter+1 << "  ";
     std::cout << std::setprecision(13) << residual << "  ";
@@ -96,6 +87,9 @@ void iteration_print(const ProcGroup& pg, int iter, double residual, double ener
     std::cout << std::string(4, ' ') << "0.0";
     std::cout << std::string(5, ' ') << time;
     std::cout << std::string(5, ' ') << "0.0" << std::endl;
+
+    sys_data.results["output"]["CCSD"]["iter"][std::to_string(iter+1)]["data"] = { {"residual", residual}, {"correlation", energy} };
+    sys_data.results["output"]["CCSD"]["iter"][std::to_string(iter+1)]["profile"] = { {"total_time", time} };
   }
 }
 
@@ -107,55 +101,6 @@ void iteration_print_lambda(const ProcGroup& pg, int iter, double residual, doub
     std::cout << std::string(8, ' ') << "0.0";
     std::cout << std::string(5, ' ') << time << std::endl;
   }
-}
-
-template<typename T>
-std::pair<double,double> rest_cs(ExecutionContext& ec,
-                              const TiledIndexSpace& MO,
-                              Tensor<T>& d_r1,
-                              Tensor<T>& d_r2,
-                              Tensor<T>& d_t1,
-                              Tensor<T>& d_t2,
-                              Tensor<T>& de,
-                              Tensor<T>& d_r1_residual,
-                              Tensor<T>& d_r2_residual,
-                              std::vector<T>& p_evl_sorted, T zshiftl, 
-                              const TAMM_SIZE& noa,
-                              const TAMM_SIZE& nva, 
-                              bool transpose=false) {
-
-    T residual, energy;
-    Scheduler sch{ec};
-    // Tensor<T> d_r1_residual{}, d_r2_residual{};
-    // Tensor<T>::allocate(&ec,d_r1_residual, d_r2_residual);
-    sch
-      (d_r1_residual() = d_r1()  * d_r1())
-      (d_r2_residual() = d_r2()  * d_r2())
-      .execute();
-
-      auto l0 = [&]() {
-        T r1 = get_scalar(d_r1_residual);
-        T r2 = get_scalar(d_r2_residual);
-        r1 = 0.5*std::sqrt(r1);
-        r2 = 0.5*std::sqrt(r2);
-        energy = get_scalar(de);
-        residual = std::max(r1,r2);
-      };
-
-      auto l1 =  [&]() {
-        jacobi_cs(ec, d_r1, d_t1, -1.0 * zshiftl, transpose, p_evl_sorted,noa,nva);
-      };
-      auto l2 = [&]() {
-        jacobi_cs(ec, d_r2, d_t2, -2.0 * zshiftl, transpose, p_evl_sorted,noa,nva);
-      };
-
-      l0();
-      l1();
-      l2();
-
-      // Tensor<T>::deallocate(d_r1_residual, d_r2_residual);
-      
-    return {residual, energy};
 }
 
 /**
@@ -173,14 +118,16 @@ std::pair<double,double> rest(ExecutionContext& ec,
                               Tensor<T>& d_t1,
                               Tensor<T>& d_t2,
                               Tensor<T>& de,
+                              Tensor<T>& d_r1_residual,
+                              Tensor<T>& d_r2_residual,                              
                               std::vector<T>& p_evl_sorted, T zshiftl, 
                               const TAMM_SIZE& noa,
                               const TAMM_SIZE& nob, bool transpose=false) {
 
     T residual, energy;
     Scheduler sch{ec};
-    Tensor<T> d_r1_residual{}, d_r2_residual{};
-    Tensor<T>::allocate(&ec,d_r1_residual, d_r2_residual);
+    // Tensor<T> d_r1_residual{}, d_r2_residual{};
+    // Tensor<T>::allocate(&ec,d_r1_residual, d_r2_residual);
     sch
       (d_r1_residual() = d_r1()  * d_r1())
       (d_r2_residual() = d_r2()  * d_r2())
@@ -206,7 +153,7 @@ std::pair<double,double> rest(ExecutionContext& ec,
       l1();
       l2();
 
-      Tensor<T>::deallocate(d_r1_residual, d_r2_residual);
+      // Tensor<T>::deallocate(d_r1_residual, d_r2_residual);
       
     return {residual, energy};
 }
@@ -219,14 +166,17 @@ std::pair<double,double> rest_cs(ExecutionContext& ec,
                               Tensor<T>& d_t1,
                               Tensor<T>& d_t2,
                               Tensor<T>& de,
+                              Tensor<T>& d_r1_residual,
+                              Tensor<T>& d_r2_residual,
                               std::vector<T>& p_evl_sorted, T zshiftl, 
                               const TAMM_SIZE& noa,
-                              const TAMM_SIZE& nva, bool transpose=false) {
+                              const TAMM_SIZE& nva, bool transpose=false,
+			       const bool not_spin_orbital=false) {
 
     T residual, energy;
     Scheduler sch{ec};
-    Tensor<T> d_r1_residual{}, d_r2_residual{};
-    Tensor<T>::allocate(&ec,d_r1_residual, d_r2_residual);
+    // Tensor<T> d_r1_residual{}, d_r2_residual{};
+    // Tensor<T>::allocate(&ec,d_r1_residual, d_r2_residual);
     sch
       (d_r1_residual() = d_r1()  * d_r1())
       (d_r2_residual() = d_r2()  * d_r2())
@@ -242,17 +192,17 @@ std::pair<double,double> rest_cs(ExecutionContext& ec,
       };
 
       auto l1 =  [&]() {
-        jacobi_cs(ec, d_r1, d_t1, -1.0 * zshiftl, transpose, p_evl_sorted,noa,nva);
+        jacobi_cs(ec, d_r1, d_t1, -1.0 * zshiftl, transpose, p_evl_sorted,noa,nva,not_spin_orbital);
       };
       auto l2 = [&]() {
-        jacobi_cs(ec, d_r2, d_t2, -2.0 * zshiftl, transpose, p_evl_sorted,noa,nva);
+        jacobi_cs(ec, d_r2, d_t2, -2.0 * zshiftl, transpose, p_evl_sorted,noa,nva,not_spin_orbital);
       };
 
       l0();
       l1();
       l2();
 
-      Tensor<T>::deallocate(d_r1_residual, d_r2_residual);
+      // Tensor<T>::deallocate(d_r1_residual, d_r2_residual);
       
     return {residual, energy};
 }
@@ -266,14 +216,19 @@ std::tuple<TiledIndexSpace,TAMM_SIZE> setupMOIS(SystemData sys_data, bool triple
     TAMM_SIZE freeze_virtual = sys_data.n_frozen_virtual;
 
     Tile tce_tile = sys_data.options_map.ccsd_options.tilesize;
+    bool balance_tiles = sys_data.options_map.ccsd_options.balance_tiles;
     if(!triples) {
-      if ((tce_tile < static_cast<Tile>(sys_data.nbf/10) || tce_tile < 50) && !sys_data.options_map.ccsd_options.force_tilesize) {
+      if ((tce_tile < static_cast<Tile>(sys_data.nbf/10) || tce_tile < 50 || tce_tile > 100) && !sys_data.options_map.ccsd_options.force_tilesize) {
         tce_tile = static_cast<Tile>(sys_data.nbf/10);
         if(tce_tile < 50) tce_tile = 50; //50 is the default tilesize for CCSD.
+        if(tce_tile > 100) tce_tile = 100; //100 is the max tilesize for CCSD.
         if(GA_Nodeid()==0) std::cout << std::endl << "Resetting CCSD tilesize to: " << tce_tile << std::endl;
       }
     }
-    else tce_tile = sys_data.options_map.ccsd_options.ccsdt_tilesize;
+    else {
+      balance_tiles = false;
+      tce_tile = sys_data.options_map.ccsd_options.ccsdt_tilesize;
+    }
 
     TAMM_SIZE nmo = sys_data.nmo;
     TAMM_SIZE n_vir_alpha = sys_data.n_vir_alpha;
@@ -309,7 +264,7 @@ std::tuple<TiledIndexSpace,TAMM_SIZE> setupMOIS(SystemData sys_data, bool triple
 
     std::vector<Tile> mo_tiles;
     
-    if(!sys_data.options_map.ccsd_options.balance_tiles) {
+    if(!balance_tiles) {
       tamm::Tile est_nt = n_occ_alpha/tce_tile;
       tamm::Tile last_tile = n_occ_alpha%tce_tile;
       for (tamm::Tile x=0;x<est_nt;x++)mo_tiles.push_back(tce_tile);
@@ -502,11 +457,13 @@ std::tuple<SystemData, double,
     std::vector<size_t> shell_tile_map;
     bool scf_conv;
 
-    // read geometry from a .nwx file 
+    // read geometry from a json file
+    json jinput;
+    check_json(filename);
     auto is = std::ifstream(filename);
-    std::vector<Atom> atoms;
     OptionsMap options_map;
-    std::tie(atoms, options_map) = read_input_nwx(is);
+    std::tie(options_map, jinput) = parse_input(is);
+    std::vector<Atom> atoms = options_map.options.atoms;
     if(options_map.options.output_file_prefix.empty()) 
       options_map.options.output_file_prefix = getfilename(filename);
     
@@ -514,7 +471,7 @@ std::tuple<SystemData, double,
 
     auto hf_t1 = std::chrono::high_resolution_clock::now();
 
-    std::tie(sys_data, hf_energy, shells, shell_tile_map, C_AO, F_AO, C_beta_AO, F_beta_AO, tAO, tAOt,scf_conv) = hartree_fock(ec, filename, atoms, options_map);
+    std::tie(sys_data, hf_energy, shells, shell_tile_map, C_AO, F_AO, C_beta_AO, F_beta_AO, tAO, tAOt, scf_conv) = hartree_fock(ec, filename, atoms, options_map);
     sys_data.input_molecule = getfilename(filename);
     sys_data.output_file_prefix = options_map.options.output_file_prefix;
 
@@ -527,54 +484,6 @@ std::tuple<SystemData, double,
     return std::make_tuple(sys_data, hf_energy, shells, shell_tile_map, C_AO, F_AO, C_beta_AO, F_beta_AO, tAO, tAOt, scf_conv);
 }
 
-#if 0
-template<typename T> 
-std::tuple<Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile>  cd_svd_driver(OptionsMap options_map,
- ExecutionContext& ec, TiledIndexSpace& MO, TiledIndexSpace& AO_tis,
-  const TAMM_SIZE n_occ_alpha, const TAMM_SIZE nao, const TAMM_SIZE freeze_core,
-  const TAMM_SIZE freeze_virtual, Tensor<TensorType> C_AO, Tensor<TensorType> F_AO,
-  libint2::BasisSet& shells, std::vector<size_t>& shell_tile_map){
-
-    CDOptions cd_options = options_map.cd_options;
-    tamm::Tile max_cvecs = cd_options.max_cvecs_factor * nao;
-    auto diagtol = cd_options.diagtol; // tolerance for the max. diagonal
-
-    std::cout << std::defaultfloat;
-    auto rank = ec.pg().rank();
-    if(rank==0) cd_options.print();
-
-    TiledIndexSpace N = MO("all");
-
-    Tensor<T> d_f1{{N,N},{1,1}};
-    Tensor<T>::allocate(&ec,d_f1);
-
-    auto hf_t1        = std::chrono::high_resolution_clock::now();
-    TAMM_SIZE chol_count = 0;
-
-    //std::tie(V2) = 
-    Tensor<T> cholVpr = cd_svd(ec, MO, AO_tis, n_occ_alpha, nao, freeze_core, freeze_virtual,
-                                C_AO, F_AO, d_f1, chol_count, max_cvecs, diagtol, shells, shell_tile_map);
-    auto hf_t2        = std::chrono::high_resolution_clock::now();
-    double cd_svd_time =
-      std::chrono::duration_cast<std::chrono::duration<double>>((hf_t2 - hf_t1)).count();
-
-    if(rank == 0) std::cout << std::endl << "Total Time taken for CD (+SVD): " << cd_svd_time
-              << " secs" << std::endl;
-
-    Tensor<T>::deallocate(C_AO,F_AO);
-
-    // IndexSpace CI{range(0, max_cvecs)};
-    // TiledIndexSpace tCI{CI, max_cvecs};
-    // auto [cindex] = tCI.labels<1>("all");
-
-    // IndexSpace CIp{range(0, chol_count)};
-    // TiledIndexSpace tCIp{CIp, 1};
-    // auto [cindexp] = tCIp.labels<1>("all");
-
-    return std::make_tuple(cholVpr, d_f1, chol_count, max_cvecs);
-
-}
-#endif
 
 void ccsd_stats(ExecutionContext& ec, double hf_energy,double residual,double energy,double thresh){
 
@@ -595,7 +504,7 @@ void ccsd_stats(ExecutionContext& ec, double hf_energy,double residual,double en
     }
     if(!ccsd_conv){
       ec.pg().barrier();
-      nwx_terminate("ERROR: CCSD calculation does not converge!");
+      tamm_terminate("ERROR: CCSD calculation does not converge!");
     }
 
 }
@@ -770,10 +679,11 @@ Tensor<T> setupV2(ExecutionContext& ec, TiledIndexSpace& MO, TiledIndexSpace& CI
 }
 
 template<typename T> 
-std::tuple<Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile, TiledIndexSpace>  cd_svd_ga_driver(SystemData& sys_data,
-  ExecutionContext& ec, TiledIndexSpace& MO, TiledIndexSpace& AO_tis,
-  Tensor<TensorType> C_AO, Tensor<TensorType> F_AO, Tensor<TensorType> C_beta_AO, Tensor<TensorType> F_beta_AO, libint2::BasisSet& shells, 
-  std::vector<size_t>& shell_tile_map, bool readv2=false, std::string cholfile=""){
+std::tuple<Tensor<T>,Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile, TiledIndexSpace>  
+  cd_svd_ga_driver(SystemData& sys_data, ExecutionContext& ec, TiledIndexSpace& MO, TiledIndexSpace& AO,
+  Tensor<T> C_AO, Tensor<T> F_AO, Tensor<T> C_beta_AO, Tensor<T> F_beta_AO, 
+  libint2::BasisSet& shells, std::vector<size_t>& shell_tile_map, bool readv2=false, 
+  std::string cholfile="", bool is_dlpno=false) {
 
     CDOptions cd_options = sys_data.options_map.cd_options;
     auto diagtol = cd_options.diagtol; // tolerance for the max. diagonal
@@ -789,7 +699,8 @@ std::tuple<Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile, TiledIndexSpace>  cd_svd_g
     TiledIndexSpace N = MO("all");
 
     Tensor<T> d_f1{{N,N},{1,1}};
-    Tensor<T>::allocate(&ec,d_f1);
+    Tensor<T> lcao{AO, N};
+    Tensor<T>::allocate(&ec,d_f1,lcao);
 
     auto hf_t1        = std::chrono::high_resolution_clock::now();
     TAMM_SIZE chol_count = 0;
@@ -800,15 +711,15 @@ std::tuple<Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile, TiledIndexSpace>  cd_svd_g
     auto itile_size = sys_data.options_map.ccsd_options.itilesize;
 
     if(!readv2) {
-      cholVpr = cd_svd_ga(sys_data, ec, MO, AO_tis,
-                          C_AO, F_AO, C_beta_AO,F_beta_AO, d_f1, chol_count, max_cvecs, shells, shell_tile_map);
+      two_index_transform(sys_data, ec, C_AO, F_AO, C_beta_AO,F_beta_AO, d_f1, lcao, is_dlpno);
+      cholVpr = cd_svd_ga(sys_data, ec, MO, AO, chol_count, max_cvecs, shells, lcao);
     }
     else{
       std::ifstream in(cholfile, std::ios::in);
       int rstatus = 0;
       if(in.is_open()) rstatus = 1;
       if(rstatus == 1) in >> chol_count; 
-      else nwx_terminate("Error reading " + cholfile);
+      else tamm_terminate("Error reading " + cholfile);
 
       if(rank==0) cout << "Number of cholesky vectors to be read = " << chol_count << endl;
 
@@ -834,9 +745,11 @@ std::tuple<Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile, TiledIndexSpace>  cd_svd_g
     TiledIndexSpace CI{chol_is,static_cast<tamm::Tile>(itile_size)}; 
 
     sys_data.num_chol_vectors = chol_count;
+    sys_data.results["output"]["CD"]["n_cholesky_vectors"] = chol_count;
+
     if(rank == 0) sys_data.print();
 
-    return std::make_tuple(cholVpr, d_f1, chol_count, max_cvecs, CI);
+    return std::make_tuple(cholVpr, d_f1, lcao, chol_count, max_cvecs, CI);
 }
 
-#endif //TESTS_CCSD_UTIL_HPP_
+#endif //TAMM_CCSD_UTIL_HPP_

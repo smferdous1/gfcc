@@ -1,0 +1,49 @@
+{
+  "geometry": {
+    "coordinates": [
+      "H     0.00000000    0.00000000    0.00000000",
+      "O     0.75946038    0.00000000    0.56053336",
+      "H    -0.75946038    0.00000000    0.56053336"
+    ],
+    "units": "bohr"
+  },
+  "basis": {
+    "basisset": "cc-pvdz",
+    "sphcart": "spherical"
+  },
+  "common": {
+    "maxiter": 50
+  },
+  "SCF": {
+    "tol_int": 1e-20,
+    "tol_lindep": 1e-06,
+    "conve": 1e-12,
+    "convd": 1e-11,
+    "diis_hist": 10,
+    "force_tilesize": false,
+    "tilesize": 30
+  },
+  "CD": {
+    "diagtol": 1e-08,
+  },
+  "CC": {
+    "threshold": 1e-10,
+    "writet": true,
+    "GFCCSD": {
+      "gf_ip": true,
+      "gf_p_oi_range": 1,
+      "gf_eta": -0.01,
+      "gf_threshold": 0.01,
+      "gf_maxiter": 100,
+      "gf_itriples": false,
+      "gf_ngmres": 10,
+      "gf_damping_factor": 1.0,
+      "gf_omega_min_ip": -0.4,
+      "gf_omega_max_ip": -0.2,
+      "gf_omega_min_ip_e": -2.0,
+      "gf_omega_max_ip_e": 0.0,
+      "gf_omega_delta": 0.01,
+      "gf_omega_delta_e": 0.002
+    }
+  }
+}
