@@ -276,17 +276,17 @@ void gfccsd_driver_ip_a(ExecutionContext& gec, ExecutionContext& sub_ec, MPI_Com
     };
 
     gsch.allocate(DEArr_IP).execute();
-    // if(subcomm != MPI_COMM_NULL){
-    //     Scheduler sub_sch{sub_ec};
-        gsch(DEArr_IP() = 0).execute();        
-        block_for(gec, DEArr_IP(), DEArr_lambda);
-        gsch      
+    if(subcomm != MPI_COMM_NULL){
+        Scheduler sub_sch{sub_ec};
+        sub_sch(DEArr_IP() = 0).execute();        
+        block_for(sub_ec, DEArr_IP(), DEArr_lambda);
+        sub_sch      
           (dtmp_aaa() = 0)
           (dtmp_bab() = 0)
           (dtmp_aaa(p1_va,h1_oa,h2_oa) = DEArr_IP(p1_va,h1_oa,h2_oa))
           (dtmp_bab(p1_vb,h1_oa,h2_ob) = DEArr_IP(p1_vb,h1_oa,h2_ob))
           .execute();
-    // }
+    }
     gec.pg().barrier();
     gsch.deallocate(DEArr_IP).execute();
     write_to_disk(dtmp_aaa,dtmp_aaa_file);
@@ -863,6 +863,7 @@ void gfccsd_main_driver(std::string filename) {
         sub_pg = ProcGroup::create_coll(subcomm);
         sub_ec = new ExecutionContext(sub_pg, DistributionKind::nw, MemoryManagerKind::ga);
     }
+    EXPECTS(subcomm != MPI_COMM_NULL);
 
     Scheduler sub_sch{*sub_ec};
 
@@ -1641,12 +1642,12 @@ void gfccsd_main_driver(std::string filename) {
             
             ivec_start = prev_qr_rank;
   
-            // if(subcomm != MPI_COMM_NULL){
-              sch
+            if(subcomm != MPI_COMM_NULL){
+              sub_sch
                 (q1_tamm_a(h1_oa,op1) = q1_prev_a(h1_oa,op1))
                 (q2_tamm_aaa(p1_va,h1_oa,h2_oa,op1) = q2_prev_aaa(p1_va,h1_oa,h2_oa,op1))
                 (q2_tamm_bab(p1_vb,h1_oa,h2_ob,op1) = q2_prev_bab(p1_vb,h1_oa,h2_ob,op1)).execute();
-            // }                
+            }          
             sch.deallocate(q1_prev_a,q2_prev_aaa,q2_prev_bab).execute();           
           }     
   
@@ -1751,13 +1752,13 @@ void gfccsd_main_driver(std::string filename) {
               TiledIndexSpace tsc{otis, range(ivec,ivec+1)};
               auto [sc] = tsc.labels<1>("all");
   
-              // if(subcomm != MPI_COMM_NULL){
-                sch
+              if(subcomm != MPI_COMM_NULL){
+                sub_sch
                 (q1_tamm_a(h1_oa,sc) = cnewsc * q1_tmp_a(h1_oa))
                 (q2_tamm_aaa(p2_va,h1_oa,h2_oa,sc) = cnewsc * q2_tmp_aaa(p2_va,h1_oa,h2_oa))
                 (q2_tamm_bab(p2_vb,h1_oa,h2_ob,sc) = cnewsc * q2_tmp_bab(p2_vb,h1_oa,h2_ob))
                 .execute();
-              // }
+              }
               ec.pg().barrier();
   
               auto cc_gs = std::chrono::high_resolution_clock::now();
