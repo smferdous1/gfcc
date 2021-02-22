@@ -1,0 +1,91 @@
+{
+
+  "geometry" : {
+    "coordinates": [
+        "C   0.00000000     0.00000000    0.00000000",
+        "O   0.00000000     0.00000000    1.128"
+        ],
+        "units": "angstrom"
+    },
+
+    "basis": {
+        "basisset": "cc-pvdz",
+        "sphcart": "spherical"
+    },
+
+    "common": {
+        "maxiter": 50,
+        "debug": false,
+        "output_file_prefix": ""
+    },
+    
+    "SCF": {
+        "charge": 0,
+        "multiplicity": 1,
+        "lshift": 0,
+        "tol_int": 1e-12,
+        "tol_lindep": 1e-5,
+        "conve": 1e-8,
+        "convd": 1e-7,
+        "diis_hist": 10,
+        "force_tilesize": false,
+        "tilesize": 30,
+        "alpha": 0.7,
+        "nnodes": 1,
+        "writem": 10,
+        "restart": false,
+        "noscf": false,
+        "debug": false
+    },
+    
+    "CD": {
+        "diagtol": 1e-6
+    },
+    
+    "CC": {
+        "threshold": 1e-6,
+        "lshift": 0,
+        "ndiis": 5,
+        "ccsd_maxiter": 50,
+        "printtol": 0.05,
+
+        "readt": false,
+        "writet": false,
+        "writet_iter": 5,
+
+        "debug": false,
+        "profile_ccsd": false,
+
+        "tilesize": 50,
+        "force_tilesize": false,
+
+        "CCSD(T)": {
+          "ngpu": 2,
+          "ccsdt_tilesize": 28
+        },
+    
+       "GFCCSD": {
+        "gf_ip": true,
+        "gf_cs": true,
+        "gf_ngmres": 10,
+        "gf_maxiter": 100,
+        "gf_damping_factor": 1.0,
+        "gf_p_oi_range": 1,
+        "gf_eta": 0.01,
+        "gf_threshold": 0.01,
+        "gf_omega_min_ip": -0.4,
+        "gf_omega_max_ip": -0.2,
+        "gf_omega_min_ip_e": -2.0,
+        "gf_omega_max_ip_e": 0.0,
+        "gf_omega_delta": 0.01,
+        "gf_omega_delta_e": 0.01,
+        "gf_orbitals": [],
+        "gf_extrapolate_level": 0,
+        "gf_analyze_level": 2,
+        "gf_analyze_num_omega": 0,
+        "gf_analyze_omega": [0.3, 0.2]
+       }
+    }
+    
+}
+    

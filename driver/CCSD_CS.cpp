@@ -1,5 +1,3 @@
-#ifndef CCSD_HPP_
-#define CCSD_HPP_
 
 #include "gfcc/contrib/cd_ccsd_common_cs.hpp"
 
@@ -171,5 +169,3 @@ void ccsd_driver() {
     // delete ec;
 
 }
-
-#endif
