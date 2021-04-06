@@ -177,12 +177,12 @@ void ccsd_driver() {
     free_tensors(d_t1, d_t2, d_f1);
     ec.flush_and_sync();
 
-    t1file = files_prefix+".t1fullamp";
-    t2file = files_prefix+".t2fullamp";
+    t1file = files_prefix+".fullT1amp";
+    t2file = files_prefix+".fullT2amp";
 
     bool  ccsd_t_restart = fs::exists(t1file) && fs::exists(t2file); 
     
-    if(!ccsd_t_restart) tamm_terminate("t1,t2 full amp files not found");
+    if(!ccsd_t_restart) tamm_terminate("Full T1,T2 amplitudes data not found, please set writev option");
     
     ccsd_t_restart = ccsd_t_restart && fs::exists(f1file) && fs::exists(fullV2file);
 

@@ -434,8 +434,8 @@ std::tuple<double,double> cd_ccsd_cs_driver(SystemData sys_data, ExecutionContex
         (d_t2(p1_vb,p2_vb,h3_ob,h4_ob) = t2_bbbb(p1_vb,p2_vb,h3_ob,h4_ob))
         .deallocate(t1_bb,t2_bbbb).execute();
 
-        std::string t1file = out_fp+".t1fullamp";
-        std::string t2file = out_fp+".t2fullamp";
+        std::string t1file = out_fp+".fullT1amp";
+        std::string t2file = out_fp+".fullT2amp";
         write_to_disk(d_t1,t1file);
         write_to_disk(d_t2,t2file); 
 
