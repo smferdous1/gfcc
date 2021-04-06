@@ -51,6 +51,7 @@
 
         "readt": false,
         "writet": false,
+        "writev": false,
         "writet_iter": 5,
 
         "debug": false,

@@ -219,6 +219,7 @@ class CCSDOptions: public Options {
     profile_ccsd   = false;
 
     writet         = false;
+    writev         = false;
     writet_iter    = ndiis;
     readt          = false;
 
@@ -273,7 +274,7 @@ class CCSDOptions: public Options {
   bool   force_tilesize;
   int    ndiis;
   int    writet_iter;
-  bool   readt, writet, gf_restart, gf_ip, gf_ea, gf_os, gf_cs, 
+  bool   readt, writet, writev, gf_restart, gf_ip, gf_ea, gf_os, gf_cs, 
          gf_itriples, balance_tiles;
   bool   profile_ccsd;
   double lshift;
@@ -348,6 +349,7 @@ class CCSDOptions: public Options {
       cout << " gf_nprocs_poi        = " << gf_nprocs_poi  << endl;
     print_bool(" readt               ", readt); 
     print_bool(" writet              ", writet);
+    print_bool(" writev              ", writev);
     cout << " writet_iter          = " << writet_iter      << endl;
     print_bool(" profile_ccsd        ", profile_ccsd);
     print_bool(" balance_tiles       ", balance_tiles);
@@ -508,6 +510,7 @@ std::tuple<Options, SCFOptions, CDOptions, CCSDOptions> parse_json(json& jinput)
     parse_option<bool>  (ccsd_options.debug         , jcc, "debug");
     parse_option<bool>  (ccsd_options.readt         , jcc, "readt"); 
     parse_option<bool>  (ccsd_options.writet        , jcc, "writet");
+    parse_option<bool>  (ccsd_options.writev        , jcc, "writev");
     parse_option<int>   (ccsd_options.writet_iter   , jcc, "writet_iter");           
     parse_option<bool>  (ccsd_options.balance_tiles , jcc, "balance_tiles");
     parse_option<bool>  (ccsd_options.profile_ccsd  , jcc, "profile_ccsd");                

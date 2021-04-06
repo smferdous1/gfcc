@@ -32,4 +32,4 @@ else()
             ${CCSD_T_SRCDIR}/ccsd_t_all_fused_cpu.hpp)
 endif()
 
-add_mpi_cuda_unit_test(CCSD_T "${CCSD_T_FUSED_SRCS}" 2 "${CMAKE_SOURCE_DIR}/../tests/co.json")
+add_mpi_cuda_unit_test(CCSD_T_CS "${CCSD_T_FUSED_SRCS}" 2 "${CMAKE_SOURCE_DIR}/../tests/co.json")

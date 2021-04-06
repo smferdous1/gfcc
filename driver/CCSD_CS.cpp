@@ -112,7 +112,9 @@ void ccsd_driver() {
 
     auto cc_t1 = std::chrono::high_resolution_clock::now();
 
+    ExecutionHW ex_hw = ExecutionHW::CPU;
     #ifdef USE_TALSH
+    ex_hw = ExecutionHW::GPU;
     const bool has_gpu = ec.has_gpu();
     TALSH talsh_instance;
     if(has_gpu) talsh_instance.initialize(ec.gpu_devid(),rank.value());
@@ -120,11 +122,14 @@ void ccsd_driver() {
 
     ccsd_restart = ccsd_restart && fs::exists(ccsdstatus) && scf_conv;
 
+    std::string fullV2file = files_prefix+".fullV2";
+    bool  computeTData = !fs::exists(fullV2file) && ccsd_options.writev;
+
     auto [residual, corr_energy] = cd_ccsd_cs_driver<T>(
             sys_data, ec, MO, CI, d_t1, d_t2, d_f1, 
             d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
             p_evl_sorted, 
-            cholVpr, ccsd_restart, files_prefix);
+            cholVpr, ccsd_restart, files_prefix, computeTData);
 
     ccsd_stats(ec, hf_energy,residual,corr_energy,ccsd_options.threshold);
 
@@ -139,10 +144,6 @@ void ccsd_driver() {
         }          
     }
 
-    #ifdef USE_TALSH
-    //talshStats();
-    if(has_gpu) talsh_instance.shutdown();
-    #endif  
 
     auto cc_t2 = std::chrono::high_resolution_clock::now();
     double ccsd_time = 
@@ -163,7 +164,21 @@ void ccsd_driver() {
         free_tensors(d_r1,d_r2);
         free_vec_tensors(d_r1s, d_r2s, d_t1s, d_t2s);
     }
-    free_tensors(d_t1, d_t2, d_f1, cholVpr);
+    free_tensors(d_t1, d_t2, d_f1);
+
+    Tensor<T> d_v2;
+    if(computeTData) {
+        d_v2 = setupV2<T>(ec,MO,CI,cholVpr,chol_count, ex_hw);
+        write_to_disk(d_v2,fullV2file,true);
+        Tensor<T>::deallocate(d_v2);
+    }
+
+    free_tensors(cholVpr);
+
+    #ifdef USE_TALSH
+    //talshStats();
+    if(has_gpu) talsh_instance.shutdown();
+    #endif  
 
     ec.flush_and_sync();
     // delete ec;

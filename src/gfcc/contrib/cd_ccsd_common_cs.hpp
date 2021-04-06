@@ -167,7 +167,7 @@ std::tuple<double,double> cd_ccsd_cs_driver(SystemData sys_data, ExecutionContex
                    Tensor<T>& r1_aa, Tensor<T>& r2_abab, std::vector<Tensor<T>>& d_r1s, 
                    std::vector<Tensor<T>>& d_r2s, std::vector<Tensor<T>>& d_t1s, 
                    std::vector<Tensor<T>>& d_t2s, std::vector<T>& p_evl_sorted,
-                   Tensor<T>& cv3d, bool ccsd_restart=false, std::string out_fp="") {
+                   Tensor<T>& cv3d, bool ccsd_restart=false, std::string out_fp="",bool computeTData=false) {
 
     int    maxiter     = sys_data.options_map.ccsd_options.ccsd_maxiter;
     int    ndiis       = sys_data.options_map.ccsd_options.ndiis;
@@ -411,6 +411,35 @@ std::tuple<double,double> cd_ccsd_cs_driver(SystemData sys_data, ExecutionContex
         sys_data.results["output"]["CCSD"]["final_energy"]["correlation"] =  energy;
         sys_data.results["output"]["CCSD"]["final_energy"]["total"] =  sys_data.scf_energy+energy;
         write_json_data(sys_data,"CCSD");
+    }
+
+    if(computeTData) {
+        Tensor<T> d_t1{{V,O},{1,1}};
+        Tensor<T> d_t2{{V,V,O,O},{2,2}};
+        Tensor<T> t1_bb  {{v_beta ,o_beta}                 ,{1,1}};
+        Tensor<T> t2_bbbb{{v_beta ,v_beta ,o_beta ,o_beta} ,{2,2}};
+
+        Tensor<T>::allocate(&ec,d_t1,d_t2);
+
+        sch.allocate(t1_bb,t2_bbbb)
+        (d_t1() = 0)
+        (d_t2() = 0)
+        .exact_copy(t1_bb(p1_vb,h3_ob),  t1_aa(p1_vb,h3_ob))
+        .exact_copy(t2_bbbb(p1_vb,p2_vb,h3_ob,h4_ob),  t2_aaaa(p1_vb,p2_vb,h3_ob,h4_ob))
+
+        (d_t1(p1_va,h3_oa)             = t1_aa(p1_va,h3_oa))
+        (d_t1(p1_vb,h3_ob)             = t1_bb(p1_vb,h3_ob)) 
+        (d_t2(p1_va,p2_va,h3_oa,h4_oa) = t2_aaaa(p1_va,p2_va,h3_oa,h4_oa))
+        (d_t2(p1_va,p2_vb,h3_oa,h4_ob) = t2_abab(p1_va,p2_vb,h3_oa,h4_ob))
+        (d_t2(p1_vb,p2_vb,h3_ob,h4_ob) = t2_bbbb(p1_vb,p2_vb,h3_ob,h4_ob))
+        .deallocate(t1_bb,t2_bbbb).execute();
+
+        std::string t1file = out_fp+".t1fullamp";
+        std::string t2file = out_fp+".t2fullamp";
+        write_to_disk(d_t1,t1file);
+        write_to_disk(d_t2,t2file); 
+
+        free_tensors(d_t1, d_t2);
     }
 
     sch.deallocate(i0_temp,t2_aaaa_temp,_a01,_a02_aa,_a03_aa);
