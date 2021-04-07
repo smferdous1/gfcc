@@ -9,6 +9,7 @@ include_directories(${CMAKE_SOURCE_DIR}/../utils/external)
 add_mpi_unit_test(CCSD_CS 2 "${CMAKE_SOURCE_DIR}/../tests/co.json")
 #add_mpi_unit_test(GF_CCSD 2 "${CMAKE_SOURCE_DIR}/../tests/co.json")
 add_mpi_unit_test(HartreeFock 2 "${CMAKE_SOURCE_DIR}/../tests/co.json")
+add_mpi_unit_test(CholeskyDecomp 2 "${CMAKE_SOURCE_DIR}/../tests/co.json")
 
 set(CCSD_T_SRCDIR ${CMAKE_SOURCE_DIR}/../src/gfcc/contrib/ccsd_t)
 set(CCSD_T_SRCS
