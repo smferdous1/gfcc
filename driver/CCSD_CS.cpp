@@ -123,13 +123,17 @@ void ccsd_driver() {
     ccsd_restart = ccsd_restart && fs::exists(ccsdstatus) && scf_conv;
 
     std::string fullV2file = files_prefix+".fullV2";
+    t1file = files_prefix+".fullT1amp";
+    t2file = files_prefix+".fullT2amp";
+
     bool  computeTData = !fs::exists(fullV2file) && ccsd_options.writev;
 
     auto [residual, corr_energy] = cd_ccsd_cs_driver<T>(
             sys_data, ec, MO, CI, d_t1, d_t2, d_f1, 
             d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
             p_evl_sorted, 
-            cholVpr, ccsd_restart, files_prefix, computeTData);
+            cholVpr, ccsd_restart, files_prefix,
+            computeTData && !(fs::exists(t1file) && fs::exists(t2file)));
 
     ccsd_stats(ec, hf_energy,residual,corr_energy,ccsd_options.threshold);
 
@@ -179,6 +183,51 @@ void ccsd_driver() {
     //talshStats();
     if(has_gpu) talsh_instance.shutdown();
     #endif  
+
+    if(computeTData) {
+        if(rank==0) {
+            cout << endl << "Retile T1,T2,V2 and write to disk... " << endl;   
+        }
+
+        auto [MO1,total_orbitals1] = setupMOIS(sys_data,true);
+        TiledIndexSpace N1 = MO1("all");
+        TiledIndexSpace O1 = MO1("occ");
+        TiledIndexSpace V1 = MO1("virt");
+
+        // Tensor<T> t_d_f1{{N1,N1},{1,1}};
+        Tensor<T> t_d_t1{{V1,O1},{1,1}};
+        Tensor<T> t_d_t2{{V1,V1,O1,O1},{2,2}};
+        Tensor<T> t_d_v2{{N1,N1,N1,N1},{2,2}};
+        Tensor<T>::allocate(&ec,t_d_t1,t_d_t2,t_d_v2);
+
+        Scheduler{ec}   
+        // (t_d_f1() = 0)
+        (t_d_t1() = 0)
+        (t_d_t2() = 0)
+        (t_d_v2() = 0)
+        .execute();
+
+        TiledIndexSpace O = MO("occ");
+        TiledIndexSpace V = MO("virt");
+        // Tensor<T> wd_f1{{N,N},{1,1}};
+        Tensor<T> wd_t1{{V,O},{1,1}};
+        Tensor<T> wd_t2{{V,V,O,O},{2,2}};
+        Tensor<T> wd_v2{{N,N,N,N},{2,2}};
+
+        // read_from_disk(t_d_f1,f1file,false,wd_f1);
+        read_from_disk(t_d_t1,t1file,false,wd_t1);
+        read_from_disk(t_d_t2,t2file,false,wd_t2);
+        read_from_disk(t_d_v2,fullV2file,false,wd_v2); 
+
+        ec.pg().barrier();
+
+        // write_to_disk(t_d_f1,f1file);
+        write_to_disk(t_d_t1,t1file);
+        write_to_disk(t_d_t2,t2file);
+        write_to_disk(t_d_v2,fullV2file);
+
+        free_tensors(t_d_t1, t_d_t2, t_d_v2);
+    }
 
     ec.flush_and_sync();
     // delete ec;
