@@ -610,7 +610,7 @@ std::tuple<TensorType,TensorType> scf_iter_body(ExecutionContext& ec,
         sch
           (ehf_tmp(mu,nu)  = H1(mu,nu))
           (ehf_tmp(mu,nu) += F1_alpha(mu,nu))
-          (ehf_tamm()      = 0.5 * D_alpha_tamm() * ehf_tmp())
+          (ehf_tamm()      = 0.5 * D_last_alpha_tamm() * ehf_tmp())
           .execute();
       }
 
@@ -618,10 +618,10 @@ std::tuple<TensorType,TensorType> scf_iter_body(ExecutionContext& ec,
         sch
           (ehf_tmp(mu,nu)  = H1(mu,nu))
           (ehf_tmp(mu,nu) += F1_alpha(mu,nu))
-          (ehf_tamm()      = 0.5 * D_alpha_tamm() * ehf_tmp())
+          (ehf_tamm()      = 0.5 * D_last_alpha_tamm() * ehf_tmp())
           (ehf_tmp(mu,nu)  = H1(mu,nu))
           (ehf_tmp(mu,nu) += F1_beta(mu,nu))
-          (ehf_tamm()     += 0.5 * D_beta_tamm()  * ehf_tmp())
+          (ehf_tamm()     += 0.5 * D_last_beta_tamm()  * ehf_tmp())
           .execute();
       }
        
