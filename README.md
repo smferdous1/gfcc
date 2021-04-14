@@ -13,7 +13,11 @@ Document describing the code:  [gfcclib.pdf](docs/gfcclib.pdf)
 Changelog at [ChangeLog.md](ChangeLog.md)
 
 ### Citing GFCCLib
-If you are referencing GFCCLib in a publication, please cite the following JCP paper:
+If you are referencing GFCCLib in a publication, please cite the following papers:
+
+* Bo Peng, Ajay Panyala, Karol Kowalski and Sriram Krishnamoorthy,
+   **GFCCLib: Scalable and Efficient Coupled-Cluster Green's Function Library for Accurately Tackling Many Body Electronic Structure Problems**,
+ *Computer Physics Communications* ACCEPTED (April 2021) [ARXIV](https://arxiv.org/abs/2010.04768).
 
 * Bo Peng, Karol Kowalski, Ajay Panyala and Sriram Krishnamoorthy,
    **Green’s function coupled cluster simulation of the near-valence ionizations of DNA-fragments**,
