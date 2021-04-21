@@ -17,8 +17,8 @@ If you are referencing GFCCLib in a publication, please cite the following paper
 
 * Bo Peng, Ajay Panyala, Karol Kowalski and Sriram Krishnamoorthy,
    **GFCCLib: Scalable and Efficient Coupled-Cluster Green's Function Library for Accurately Tackling Many Body Electronic Structure Problems**,
- *Computer Physics Communications* ACCEPTED (April 2021) [ARXIV](https://arxiv.org/abs/2010.04768).
+ *Computer Physics Communications* (April 2021) [DOI:10.1016/j.cpc.2021.108000](https://doi.org/10.1016/j.cpc.2021.108000).
 
 * Bo Peng, Karol Kowalski, Ajay Panyala and Sriram Krishnamoorthy,
    **Green’s function coupled cluster simulation of the near-valence ionizations of DNA-fragments**,
- *The Journal of Chemical Physics* 152, 011101 (2020) [DOI:10.1063/1.5138658](https://doi.org/10.1063/1.5138658).
+ *The Journal of Chemical Physics* 152, 011101 (Jan 2020) [DOI:10.1063/1.5138658](https://doi.org/10.1063/1.5138658).
