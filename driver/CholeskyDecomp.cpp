@@ -44,7 +44,7 @@ void cd_driver() {
                     = hartree_fock_driver<T>(ec,filename);
 
     CCSDOptions ccsd_options = sys_data.options_map.ccsd_options;
-    debug = ccsd_options.debug;
+
     if(rank == 0) ccsd_options.print();
 
     if(rank==0) cout << endl << "#occupied, #virtual = " << sys_data.nocc << ", " << sys_data.nvir << endl;

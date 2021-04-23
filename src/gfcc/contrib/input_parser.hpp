@@ -586,21 +586,23 @@ inline std::tuple<OptionsMap, json>
     const double angstrom_to_bohr =
       1.889725989; // 1 / bohr_to_angstrom; //1.889726125
     
-    json jinput;
-    is >> jinput;
+    json jinput = json::parse(is, nullptr, false);
+    if (jinput.is_discarded()) { tamm_terminate("Error parsing input file"); }
 
     std::vector<string> geometry;
     parse_option<std::vector<string>>(geometry, jinput["geometry"], "coordinates", false);
     size_t natom = geometry.size();
 
-    // rest of lines are atoms
     std::vector<Atom> atoms(natom);
+    std::vector<string> geom_bohr(natom);
+
     for(size_t i = 0; i < natom; i++) {
         std::string line = geometry[i];
         std::istringstream iss(line);
         std::string element_symbol;
         double x, y, z;
         iss >> element_symbol >> x >> y >> z;
+        geom_bohr[i] = element_symbol;
 
         // .xyz files report element labels, hence convert to atomic numbers
         int Z = -1;
@@ -626,24 +628,37 @@ inline std::tuple<OptionsMap, json>
 
     auto [options, scf_options, cd_options, ccsd_options] = parse_json(jinput);    
 
+    json jgeom_bohr;
+    bool nw_units_bohr = true;
     //Done parsing input file
     {
       //If geometry units specified are angstrom, convert to bohr
-      bool nw_units_bohr = true;
       if(options.geom_units == "angstrom") nw_units_bohr = false;
 
       if(!nw_units_bohr){
         // .xyz files report Cartesian coordinates in angstroms; 
         // convert to bohr
         for(auto i = 0U; i < atoms.size(); i++){
+          std::ostringstream ss_bohr;
           atoms[i].x *= angstrom_to_bohr;
           atoms[i].y *= angstrom_to_bohr;
           atoms[i].z *= angstrom_to_bohr;
+          ss_bohr << std::setw(3) << std::left << geom_bohr[i]
+                  << " " << std::right << std::setw(14) << std::fixed << std::setprecision(10) << atoms[i].x
+                  << " " << std::right << std::setw(14) << std::fixed << std::setprecision(10) << atoms[i].y 
+                  << " " << std::right << std::setw(14) << std::fixed << std::setprecision(10) << atoms[i].z;
+          geom_bohr[i] = ss_bohr.str();
         }
+        jgeom_bohr["geometry_bohr"] = geom_bohr;
       }
     }
 
     if(GA_Nodeid()==0){
+      std::cout << jinput.dump(2) << std::endl;
+      if(!nw_units_bohr) {
+        std::cout << "Geometry in bohr as follows:" << std::endl;
+        std::cout << jgeom_bohr.dump(2) << std::endl;
+      }
       options.print();
       // scf_options.print();
       // cd_options.print();
