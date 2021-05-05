@@ -126,14 +126,17 @@ void ccsd_driver() {
     t1file = files_prefix+".fullT1amp";
     t2file = files_prefix+".fullT2amp";
 
-    bool  computeTData = !fs::exists(fullV2file) && ccsd_options.writev;
+    bool  computeTData = ccsd_options.computeTData; 
+    if(ccsd_options.writev) 
+        computeTData = computeTData && !fs::exists(fullV2file) 
+                && !fs::exists(t1file) && !fs::exists(t2file);
 
     auto [residual, corr_energy] = cd_ccsd_cs_driver<T>(
             sys_data, ec, MO, CI, d_t1, d_t2, d_f1, 
             d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
             p_evl_sorted, 
             cholVpr, ccsd_restart, files_prefix,
-            computeTData && !(fs::exists(t1file) && fs::exists(t2file)));
+            computeTData);
 
     ccsd_stats(ec, hf_energy,residual,corr_energy,ccsd_options.threshold);
 
@@ -173,8 +176,10 @@ void ccsd_driver() {
     Tensor<T> d_v2;
     if(computeTData) {
         d_v2 = setupV2<T>(ec,MO,CI,cholVpr,chol_count, ex_hw);
-        write_to_disk(d_v2,fullV2file,true);
-        Tensor<T>::deallocate(d_v2);
+        if(ccsd_options.writev) {
+          write_to_disk(d_v2,fullV2file,true);
+          Tensor<T>::deallocate(d_v2);
+        }
     }
 
     free_tensors(cholVpr);
@@ -186,7 +191,7 @@ void ccsd_driver() {
 
     if(computeTData) {
         if(rank==0) {
-            cout << endl << "Retile T1,T2,V2 and write to disk... " << endl;   
+          cout << endl << "Retile T1,T2,V2 ... " << endl;   
         }
 
         auto [MO1,total_orbitals1] = setupMOIS(sys_data,true);
@@ -209,22 +214,32 @@ void ccsd_driver() {
 
         TiledIndexSpace O = MO("occ");
         TiledIndexSpace V = MO("virt");
-        // Tensor<T> wd_f1{{N,N},{1,1}};
-        Tensor<T> wd_t1{{V,O},{1,1}};
-        Tensor<T> wd_t2{{V,V,O,O},{2,2}};
-        Tensor<T> wd_v2{{N,N,N,N},{2,2}};
 
-        // read_from_disk(t_d_f1,f1file,false,wd_f1);
-        read_from_disk(t_d_t1,t1file,false,wd_t1);
-        read_from_disk(t_d_t2,t2file,false,wd_t2);
-        read_from_disk(t_d_v2,fullV2file,false,wd_v2); 
+        if(ccsd_options.writev) {
+          // Tensor<T> wd_f1{{N,N},{1,1}};
+          Tensor<T> wd_t1{{V,O},{1,1}};
+          Tensor<T> wd_t2{{V,V,O,O},{2,2}};
+          Tensor<T> wd_v2{{N,N,N,N},{2,2}};
+                        
+          // read_from_disk(t_d_f1,f1file,false,wd_f1);
+          read_from_disk(t_d_t1,t1file,false,wd_t1);
+          read_from_disk(t_d_t2,t2file,false,wd_t2);
+          read_from_disk(t_d_v2,fullV2file,false,wd_v2); 
+          
+          ec.pg().barrier();
+          // write_to_disk(t_d_f1,f1file);
+          write_to_disk(t_d_t1,t1file);
+          write_to_disk(t_d_t2,t2file);
+          write_to_disk(t_d_v2,fullV2file);
+        }
 
-        ec.pg().barrier();
-
-        // write_to_disk(t_d_f1,f1file);
-        write_to_disk(t_d_t1,t1file);
-        write_to_disk(t_d_t2,t2file);
-        write_to_disk(t_d_v2,fullV2file);
+        else {
+          retile_tamm_tensor(dt1_full,t_d_t1);
+          retile_tamm_tensor(dt2_full,t_d_t2);
+          free_tensors(dt1_full, dt2_full);
+          retile_tamm_tensor(d_v2,t_d_v2,"V2");
+          free_tensors(d_v2);
+        }
 
         free_tensors(t_d_t1, t_d_t2, t_d_v2);
     }

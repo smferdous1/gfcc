@@ -222,6 +222,7 @@ class CCSDOptions: public Options {
     writev         = false;
     writet_iter    = ndiis;
     readt          = false;
+    computeTData   = false;
 
     localize       = false;
     skip_dlpno     = false;
@@ -275,7 +276,7 @@ class CCSDOptions: public Options {
   int    ndiis;
   int    writet_iter;
   bool   readt, writet, writev, gf_restart, gf_ip, gf_ea, gf_os, gf_cs, 
-         gf_itriples, balance_tiles;
+         gf_itriples, balance_tiles, computeTData;
   bool   profile_ccsd;
   double lshift;
   double printtol;
@@ -350,6 +351,7 @@ class CCSDOptions: public Options {
     print_bool(" readt               ", readt); 
     print_bool(" writet              ", writet);
     print_bool(" writev              ", writev);
+    print_bool(" computeTData        ", computeTData);
     cout << " writet_iter          = " << writet_iter      << endl;
     print_bool(" profile_ccsd        ", profile_ccsd);
     print_bool(" balance_tiles       ", balance_tiles);
@@ -516,6 +518,7 @@ std::tuple<Options, SCFOptions, CDOptions, CCSDOptions> parse_json(json& jinput)
     parse_option<bool>  (ccsd_options.profile_ccsd  , jcc, "profile_ccsd");                
     parse_option<bool>  (ccsd_options.force_tilesize, jcc, "force_tilesize");     
     parse_option<string>(ccsd_options.ext_data_path , jcc, "ext_data_path");    
+    parse_option<bool>  (ccsd_options.computeTData  , jcc, "computeTData");
 
     json jdlpno = jcc["DLPNO"];
     parse_option<int>   (ccsd_options.max_pnos     , jdlpno, "max_pnos");

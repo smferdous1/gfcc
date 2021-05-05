@@ -23,6 +23,8 @@ Tensor<double> _a007,_a001_aa,_a001_bb,_a017_aa,_a017_bb;
 Tensor<double> _a006_aa,_a006_bb,_a009_aa,_a009_bb,_a021_aa,_a021_bb,_a008_aa,
                _a019_abab,_a020_aaaa,_a020_baba,_a020_baab,_a020_bbbb,_a022_abab;
 
+Tensor<double> dt1_full, dt2_full;
+
 template<typename T>
 void ccsd_e(/* ExecutionContext &ec, */
             Scheduler& sch,
@@ -413,6 +415,7 @@ std::tuple<double,double> cd_ccsd_cs_driver(SystemData sys_data, ExecutionContex
         write_json_data(sys_data,"CCSD");
     }
 
+    bool writev = sys_data.options_map.ccsd_options.writev;
     if(computeTData) {
         Tensor<T> d_t1{{V,O},{1,1}};
         Tensor<T> d_t2{{V,V,O,O},{2,2}};
@@ -436,10 +439,16 @@ std::tuple<double,double> cd_ccsd_cs_driver(SystemData sys_data, ExecutionContex
 
         std::string t1file = out_fp+".fullT1amp";
         std::string t2file = out_fp+".fullT2amp";
-        write_to_disk(d_t1,t1file);
-        write_to_disk(d_t2,t2file); 
 
-        free_tensors(d_t1, d_t2);
+        if(writev) {
+          write_to_disk(d_t1,t1file);
+          write_to_disk(d_t2,t2file); 
+          free_tensors(d_t1, d_t2);
+        }
+        else {
+          dt1_full = d_t1;
+          dt2_full = d_t2;
+        }
     }
 
     sch.deallocate(i0_temp,t2_aaaa_temp,_a01,_a02_aa,_a03_aa);

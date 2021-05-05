@@ -1020,6 +1020,32 @@ void ga_to_tamm2(ExecutionContext& ec, Tensor<TensorType>& tensor, int ga_tens) 
 
     // NGA_Destroy(ga_tens);
 }
+
+/**
+ * @brief retile a tamm tensor 
+ *
+ * @param stensor source tensor
+ * @param dtensor tensor after retiling.
+ *  Assumed to be created & allocated using the new tiled index space.
+ */
+template<typename TensorType>
+void retile_tamm_tensor(Tensor<TensorType> stensor, Tensor<TensorType>& dtensor, std::string tname="") {
+    auto io_t1 = std::chrono::high_resolution_clock::now();
+
+    ExecutionContext& ec = get_ec(stensor());
+    int rank = ec.pg().rank().value();
+
+    int ga_tens = tamm_to_ga(ec,stensor);
+    ga_to_tamm(ec, dtensor, ga_tens);
+    NGA_Destroy(ga_tens);
+
+    auto io_t2 = std::chrono::high_resolution_clock::now();
+
+    double rt_time = 
+        std::chrono::duration_cast<std::chrono::duration<double>>((io_t2 - io_t1)).count();
+    if(rank == 0 && !tname.empty()) std::cout << "Time to re-tile " << tname << " tensor: " << rt_time << " secs" << std::endl;
+}
+
 /**
  * @brief read tensor from disk using HDF5
  *
