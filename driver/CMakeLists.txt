@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION ${CMAKE_VERSION})
-project(gfcc-Test VERSION 0.0.0 LANGUAGES CXX)
-find_package(gfcc REQUIRED)
+project(GFCC-Test VERSION 0.0.0 LANGUAGES CXX)
+find_package(GFCC REQUIRED)
 include(TargetMacros)
 
 include_directories(${CMAKE_SOURCE_DIR}/..)

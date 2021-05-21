@@ -14,8 +14,8 @@
 #include <libint2/basis.h>
 #include <libint2/chemistry/sto3g_atomic_density.h>
 
-#include "ga.h"
-#include "ga-mpi.h"
+#include "ga/ga.h"
+#include "ga/ga-mpi.h"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::ordered_json;

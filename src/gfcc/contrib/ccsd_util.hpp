@@ -4,8 +4,8 @@
 // #include "cd_svd.hpp"
 #include "cd_svd_ga.hpp"
 #include "two_index_transform.hpp"
-#include "macdecls.h"
-#include "ga-mpi.h"
+#include "ga/macdecls.h"
+#include "ga/ga-mpi.h"
 
 using namespace tamm;
 
