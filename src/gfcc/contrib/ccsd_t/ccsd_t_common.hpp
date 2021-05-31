@@ -17,7 +17,7 @@ using gpuEvent_t = hipEvent_t;
 using gpuStream_t = cudaStream_t;
 using gpuEvent_t = cudaEvent_t;
 #elif defined(USE_DPCPP)
-using gpuStream_t = cl::sycl::queue;
+using gpuStream_t = sycl::queue;
 #endif
 
 #include <stdio.h>
@@ -25,6 +25,7 @@ using gpuStream_t = cl::sycl::queue;
 #include <sys/time.h>
 #include <assert.h>
 #include <time.h>
+#include <string>
 
 #ifdef USE_TALSH
   #define USE_TALSH_T
@@ -62,12 +63,13 @@ typedef long Integer;
 #define TG_MIN(x,y) ((x)<(y)?(x):(y))
 
 void initMemModule();
+std::string check_memory_req(const int nDevices, const int cc_t_ts, const int nbf);
 
 #if defined(USE_DPCPP)
-void *getGpuMem(cl::sycl::queue& syclQueue, size_t bytes);
-void *getHostMem(cl::sycl::queue& syclQueue, size_t bytes);
-void freeHostMem(cl::sycl::queue& syclQueue, void *p);
-void freeGpuMem(cl::sycl::queue& syclQueue, void *p);
+void *getGpuMem(sycl::queue& syclQueue, size_t bytes);
+void *getHostMem(sycl::queue& syclQueue, size_t bytes);
+void freeHostMem(sycl::queue& syclQueue, void *p);
+void freeGpuMem(sycl::queue& syclQueue, void *p);
 #else
 void *getGpuMem(size_t bytes);
 void *getHostMem(size_t bytes);

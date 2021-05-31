@@ -15,6 +15,21 @@ using namespace tamm;
   //     }
   // };
 
+template<typename T>
+void setup_full_t1t2(ExecutionContext& ec, const TiledIndexSpace& MO,
+  Tensor<T>& dt1_full, Tensor<T>& dt2_full) {
+
+  TiledIndexSpace O = MO("occ");
+  TiledIndexSpace V = MO("virt");
+
+  dt1_full = Tensor<T>{{V,O},{1,1}};
+  dt2_full = Tensor<T>{{V,V,O,O},{2,2}};
+
+  Tensor<TensorType>::allocate(&ec,dt1_full,dt2_full);
+  // (dt1_full() = 0)
+  // (dt2_full() = 0)
+}
+
 template<typename TensorType>
 void update_r2(ExecutionContext& ec, 
               LabeledTensor<TensorType> ltensor) {
@@ -33,6 +48,28 @@ void update_r2(ExecutionContext& ec,
     };
     block_for(ec, ltensor, lambda);
 }
+
+template<typename TensorType>
+void update_gamma2(ExecutionContext& ec, 
+              LabeledTensor<TensorType> ltensor) {
+    Tensor<TensorType> tensor = ltensor.tensor();
+    auto tis = tensor.tiled_index_spaces();
+
+    auto lambda = [&](const IndexVector& bid) {
+        const IndexVector blockid   = internal::translate_blockid(bid, ltensor);
+        if(  (tis[0].spin(blockid[0]) != tis[2].spin(blockid[2])) 
+          || (tis[1].spin(blockid[1]) != tis[3].spin(blockid[3])) ) {
+          const tamm::TAMM_SIZE dsize = tensor.block_size(blockid);
+          std::vector<TensorType> dbuf(dsize);
+          tensor.get(blockid, dbuf);
+          // func(blockid, dbuf);
+          for(auto i = 0U; i < dsize; i++) dbuf[i] = 0; 
+          tensor.put(blockid, dbuf);
+        }
+    };
+    block_for(ec, ltensor, lambda);
+}
+
 
 template<typename TensorType>
 void init_diagonal(ExecutionContext& ec,
@@ -541,10 +578,10 @@ setupLambdaTensors(ExecutionContext& ec, TiledIndexSpace& MO, size_t ndiis) {
     TiledIndexSpace O = MO("occ");
     TiledIndexSpace V = MO("virt");
     
-     auto rank = ec.pg().rank();
+    auto rank = ec.pg().rank();
 
-  Tensor<T> d_r1{{O,V},{1,1}};
-  Tensor<T> d_r2{{O,O,V,V},{2,2}};
+    Tensor<T> d_r1{{O,V},{1,1}};
+    Tensor<T> d_r2{{O,O,V,V},{2,2}};
     Tensor<T> d_y1{{O,V},{1,1}};
     Tensor<T> d_y2{{O,O,V,V},{2,2}};
 
@@ -712,7 +749,7 @@ std::tuple<Tensor<T>,Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile, TiledIndexSpace>
 
     if(!readv2) {
       two_index_transform(sys_data, ec, C_AO, F_AO, C_beta_AO,F_beta_AO, d_f1, lcao, is_dlpno);
-      cholVpr = cd_svd_ga(sys_data, ec, MO, AO, chol_count, max_cvecs, shells, lcao);
+      if(!is_dlpno) cholVpr = cd_svd_ga(sys_data, ec, MO, AO, chol_count, max_cvecs, shells, lcao);
     }
     else{
       std::ifstream in(cholfile, std::ios::in);
@@ -727,7 +764,7 @@ std::tuple<Tensor<T>,Tensor<T>,Tensor<T>,TAMM_SIZE, tamm::Tile, TiledIndexSpace>
       TiledIndexSpace CI{chol_is,static_cast<tamm::Tile>(itile_size)}; 
 
       cholVpr = {{N,N,CI},{SpinPosition::upper,SpinPosition::lower,SpinPosition::ignore}};
-      Tensor<TensorType>::allocate(&ec, cholVpr);
+      if(!is_dlpno) Tensor<TensorType>::allocate(&ec, cholVpr);
       // Scheduler{ec}(cholVpr()=0).execute();
     }
 

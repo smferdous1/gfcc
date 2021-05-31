@@ -5,6 +5,8 @@
 static long long device_id=-1;
 #include <stdio.h>
 #include <stdlib.h>
+#include <cmath>
+#include <iomanip>
 #include "ccsd_t_common.hpp"
 #include "mpi.h"
 #include "ga/ga.h"
@@ -22,6 +24,54 @@ int util_my_smp_index(){
 //
 #define NUM_RANKS_PER_GPU   1
 
+std::string check_memory_req(const int nDevices, const int cc_t_ts, const int nbf) {
+  int dev_count_check = 0;
+  if(nDevices <= 0) return "";
+  double global_gpu_mem = 0;
+  std::string errmsg = "";
+  
+  #if defined(USE_CUDA)
+  cudaGetDeviceCount(&dev_count_check);
+  if(dev_count_check < nDevices){
+    errmsg = "ERROR: Please check whether you have " + std::to_string(nDevices)
+     + " cuda devices per node and set the ngpu option accordingly";
+  }
+  cudaDeviceProp gpu_properties;
+  cudaGetDeviceProperties(&gpu_properties,0);
+  global_gpu_mem = gpu_properties.totalGlobalMem;
+
+  #elif defined(USE_HIP)
+  hipGetDeviceCount(&dev_count_check);
+  if(dev_count_check < nDevices){
+    errmsg = "ERROR: Please check whether you have " + std::to_string(nDevices)
+     + " cuda devices per node and set the ngpu option accordingly";
+  }
+  hipDeviceProp_t gpu_properties;
+  hipGetDeviceProperties(&gpu_properties,0);
+  global_gpu_mem = gpu_properties.totalGlobalMem;  
+
+  //TODO: Complete
+  #elif defined(USE_DPCPP)
+  {
+    sycl::gpu_selector device_selector;
+    sycl::platform platform(device_selector);
+    auto const& gpu_devices = platform.get_devices();
+  }  
+  #endif
+
+  const double gpu_mem_req = (9.0 * (std::pow(cc_t_ts, 2) + std::pow(cc_t_ts, 4) + 2*2*nbf*std::pow(cc_t_ts, 3)) * 8);
+  int gpu_mem_check=0;
+  if(gpu_mem_req >= global_gpu_mem) gpu_mem_check = 1;
+  if(gpu_mem_check) {
+    const double gib = 1024*1024*1024.0;
+    errmsg = "ERROR: GPU memory not sufficient for (T) calculation, available memory per gpu: "
+     + std::to_string(global_gpu_mem/gib) + " GiB, required: " + std::to_string(gpu_mem_req/gib)
+     + " GiB. Please set a smaller tilesize and retry";
+  }
+
+  return errmsg;
+
+}
 
 int check_device(long iDevice) {
   /* Check whether this process is associated with a GPU */
@@ -32,8 +82,8 @@ int check_device(long iDevice) {
 
 int device_init(
 #if defined(USE_DPCPP)
-		const std::vector<cl::sycl::queue*> iDevice_syclQueue,
-		cl::sycl::queue **syclQue,
+		const std::vector<sycl::queue*> iDevice_syclQueue,
+		sycl::queue **syclQue,
 #endif
                 long iDevice,int *gpu_device_number) {
 
@@ -44,21 +94,21 @@ int device_init(
 #elif defined(USE_HIP)
   hipGetDeviceCount(&dev_count_check);
 #elif defined(USE_DPCPP)
-  cl::sycl::gpu_selector device_selector;
-  cl::sycl::platform platform(device_selector);
+  sycl::gpu_selector device_selector;
+  sycl::platform platform(device_selector);
   auto const& gpu_devices = platform.get_devices();
 
   for (const auto &dev : gpu_devices) {
-      if (dev.is_gpu()) {
-#ifdef TAMM_INTEL_ATS
-          auto SubDevicesDomainNuma = dev.create_sub_devices<cl::sycl::info::partition_property::partition_by_affinity_domain>(cl::sycl::info::partition_affinity_domain::numa);
-          for (const auto &tile : SubDevicesDomainNuma) {
-              dev_count_check++;
-          }
-#else
-      dev_count_check = gpu_devices.size();
-#endif
+    if (dev.is_gpu()) {
+      if(dev.get_info<cl::sycl::info::device::partition_max_sub_devices>() > 0) {
+        auto SubDevicesDomainNuma = dev.create_sub_devices<cl::sycl::info::partition_property::partition_by_affinity_domain>(
+          cl::sycl::info::partition_affinity_domain::numa);
+        dev_count_check += SubDevicesDomainNuma.size();
       }
+      else {
+        dev_count_check++;
+      }
+    }
   }
 #endif
 

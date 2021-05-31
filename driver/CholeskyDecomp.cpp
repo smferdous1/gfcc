@@ -1,5 +1,5 @@
 
-#include "gfcc/contrib/cd_ccsd_common_cs.hpp"
+#include "gfcc/contrib/cd_ccsd_os_ann.hpp"
 
 #include <filesystem>
 namespace fs = std::filesystem;
@@ -52,7 +52,7 @@ void cd_driver() {
     auto [MO,total_orbitals] = setupMOIS(sys_data);
 
     std::string out_fp = sys_data.output_file_prefix+"."+ccsd_options.basis;
-    std::string files_dir = out_fp+"_files";
+    std::string files_dir = out_fp+"_files/"+sys_data.options_map.scf_options.scf_type;
     std::string files_prefix = /*out_fp;*/ files_dir+"/"+out_fp;
     std::string f1file = files_prefix+".f1_mo";
     std::string v2file = files_prefix+".cholv2";
