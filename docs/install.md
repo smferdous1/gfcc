@@ -38,7 +38,8 @@ Step 1: Choose Build Options
 
 ### CUDA Options 
 ```
--DUSE_CUDA=ON (OFF by Default)
+-DUSE_CUDA=ON (OFF by default)
+-DNV_GPU_ARCH=70 (GPU arch is detected automatically, only set this option if need to override)
 ```
 
 Step 2: Building TAMM
@@ -51,7 +52,7 @@ mkdir build && cd build
 
 ## In addition to the build options chosen, there are various build configurations depending on the BLAS library one wants to use.
 
-* **[Build using reference BLAS from NETLIB](install.md#build-using-reference-blas-from-netlib)**
+* **[Default build using BLIS and NETLIB Lapack](install.md#default-build-using-blis-and-netlib-lapack)**
 
 * **[Build using Intel MKL](install.md#build-using-intel-mkl)**
 
@@ -61,7 +62,7 @@ mkdir build && cd build
 
 * **[Build instructions for Theta](install.md#build-instructions-for-theta)**
 
-## Build using reference BLAS from NETLIB
+## Default build using BLIS and NETLIB LAPACK
 
 ### To enable CUDA build, add `-DUSE_CUDA=ON`
 
@@ -225,9 +226,9 @@ Build instructions for Ubuntu Bionic 18.04
 ```
 sudo apt install g++-8 gcc-8 gfortran-8 openmpi-dev
 
-curl -LJO https://github.com/Kitware/CMake/releases/download/v3.18.4/cmake-3.18.4-Linux-x86_64.tar.gz
-tar xzf cmake-3.18.4-Linux-x86_64.tar.gz
-export PATH=`pwd`/cmake-3.15.3-Linux-x86_64/bin:$PATH
+curl -LJO https://github.com/Kitware/CMake/releases/download/v3.19.4/cmake-3.19.4-Linux-x86_64.tar.gz
+tar xzf cmake-3.19.4-Linux-x86_64.tar.gz
+export PATH=`pwd`/cmake-3.19.4-Linux-x86_64/bin:$PATH
 
 export GFCC_SRC=$HOME/gfcc_src
 export GFCC_INSTALL_PATH=$HOME/gfcc_install
