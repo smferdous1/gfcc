@@ -21,7 +21,7 @@ jobs:
         mpi_impl:
           - openmpi
         ga_port:
-          - mpi-pr
+          - MPI_PROGRESS_RANK
         cxx:
           - g++-9
         cc:
@@ -32,21 +32,21 @@ jobs:
           - os: ubuntu-20.04
             experimental: true 
             mpi_impl: openmpi
-            ga_port: mpi-pr
+            ga_port: MPI_PROGRESS_RANK
             cxx: g++-10
             cc: gcc-10
             fc: gfortran-10
           - os: ubuntu-18.04
             experimental: true 
             mpi_impl: openmpi
-            ga_port: mpi-ts
+            ga_port: MPI_2SIDED
             cxx: clang++-9
             cc: clang-9
             fc: gfortran-9
           - os: macos-latest
             experimental: true 
             mpi_impl: openmpi
-            ga_port: mpi-pr
+            ga_port: MPI_PROGRESS_RANK
             cxx: g++-9
             cc: gcc-9
             fc: gfortran-9
@@ -120,7 +120,7 @@ jobs:
           mpicxx -v || true
           cd ${GFCC_SRC}/contrib/TAMM 
           mkdir build && cd build
-          cmake -DCMAKE_INSTALL_PREFIX=${GFCC_INSTALL_PATH} -DGA_RUNTIME_OPTIONS=${GA_PORT} ..
+          cmake -DCMAKE_INSTALL_PREFIX=${GFCC_INSTALL_PATH} -DGA_RUNTIME=${GA_PORT} ..
           make -j3
           make install
           cd ${GFCC_SRC}
