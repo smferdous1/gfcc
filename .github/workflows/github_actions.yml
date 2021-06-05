@@ -63,6 +63,13 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 40
+      - name: Get Instruction
+        id: get-simd
+        run: |
+          curl -LJO https://raw.githubusercontent.com/nwchemgit/nwchem/322697785955f2a933a4ba097a1fe0f9be8d5366/travis/guess_simd.sh
+          chmod +x guess_simd.sh
+          echo "::set-output name=simd::$(./guess_simd.sh)"
+        shell: bash
       - name: Cache install steps
         id: gfcc-cache-install
         uses: actions/cache@v2
@@ -71,7 +78,7 @@ jobs:
         with:
           path: |
             ~/gfcc_cache
-          key: ${{ runner.os }}-${{ matrix.mpi_impl}}-${{ matrix.ga_port}}-${{ matrix.cc }}-${{ matrix.cxx }}-${{ matrix.config_opts}}-gfcc-v000
+          key: ${{ runner.os }}-${{ matrix.mpi_impl}}-${{ matrix.ga_port}}-${{ matrix.cc }}-${{ matrix.cxx }}-simd${{ steps.get-simd.outputs.simd }}-gfcc-v000
 
       - name: install_packages
         run: |
