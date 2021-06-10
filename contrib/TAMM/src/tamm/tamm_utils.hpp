@@ -47,6 +47,18 @@ void print_varlist(Arg&& arg, Args&&... args)
 }
 
 template<typename T>
+double compute_tensor_size(const Tensor<T>& tensor) {
+    auto lt = tensor();
+    double size = 0;
+    for(auto it : tensor.loop_nest()) {
+        auto blockid   = internal::translate_blockid(it, lt);
+        if(!tensor.is_non_zero(blockid)) continue;
+        size += tensor.block_size(blockid);
+    }
+    return size;
+}
+
+template<typename T>
 MPI_Datatype mpi_type(){
     using std::is_same_v;
 
@@ -97,7 +109,7 @@ void print_tensor(const Tensor<T>& tensor, std::string filename="") {
             if(i%6==0) tstring << "\n";
             if constexpr(tamm::internal::is_complex_v<T>) {
                  if(buf[i].real() > 0.0000000000001 ||
-                   buf[i].real() < -0.0000000000001) 
+                    buf[i].real() < -0.0000000000001) 
                    tstring << std::fixed << std::setw( 10 ) << std::setprecision(10) << buf[i] << " ";
             } else {
                if(buf[i] > 0.0000000000001 || buf[i] < -0.0000000000001)
@@ -1020,6 +1032,32 @@ void ga_to_tamm2(ExecutionContext& ec, Tensor<TensorType>& tensor, int ga_tens) 
 
     // NGA_Destroy(ga_tens);
 }
+
+/**
+ * @brief retile a tamm tensor 
+ *
+ * @param stensor source tensor
+ * @param dtensor tensor after retiling.
+ *  Assumed to be created & allocated using the new tiled index space.
+ */
+template<typename TensorType>
+void retile_tamm_tensor(Tensor<TensorType> stensor, Tensor<TensorType>& dtensor, std::string tname="") {
+    auto io_t1 = std::chrono::high_resolution_clock::now();
+
+    ExecutionContext& ec = get_ec(stensor());
+    int rank = ec.pg().rank().value();
+
+    int ga_tens = tamm_to_ga(ec,stensor);
+    ga_to_tamm(ec, dtensor, ga_tens);
+    NGA_Destroy(ga_tens);
+
+    auto io_t2 = std::chrono::high_resolution_clock::now();
+
+    double rt_time = 
+        std::chrono::duration_cast<std::chrono::duration<double>>((io_t2 - io_t1)).count();
+    if(rank == 0 && !tname.empty()) std::cout << "Time to re-tile " << tname << " tensor: " << rt_time << " secs" << std::endl;
+}
+
 /**
  * @brief read tensor from disk using HDF5
  *

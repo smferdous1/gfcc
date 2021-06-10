@@ -1,0 +1,181 @@
+name: GFCC_CI
+
+on:
+  push:
+  pull_request:
+  release:
+  schedule:
+    - cron: '0 0 * * SUN'
+  repository_dispatch:
+    types: [backend_automation]
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: "!contains(github.event.head_commit.message, 'ci skip')"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04]
+        experimental: [false]
+        mpi_impl:
+          - openmpi
+        ga_port:
+          - MPI_PROGRESS_RANK
+        cxx:
+          - g++-9
+        cc:
+          - gcc-9
+        fc:
+          - gfortran-9
+        include:
+          - os: ubuntu-20.04
+            experimental: true 
+            mpi_impl: openmpi
+            ga_port: MPI_PROGRESS_RANK
+            cxx: g++-10
+            cc: gcc-10
+            fc: gfortran-10
+          - os: ubuntu-20.04
+            experimental: true
+            mpi_impl: openmpi
+            ga_port: MPI_PROGRESS_RANK
+            cxx: g++-10
+            cc: gcc-10
+            fc: gfortran-10
+            blas: mkl
+          - os: ubuntu-18.04
+            experimental: true 
+            mpi_impl: openmpi
+            ga_port: MPI_2SIDED
+            cxx: clang++-9
+            cc: clang-9
+            fc: gfortran-9
+          - os: macos-latest
+            experimental: true 
+            mpi_impl: openmpi
+            ga_port: MPI_PROGRESS_RANK
+            cxx: g++-9
+            cc: gcc-9
+            fc: gfortran-9
+      fail-fast: false
+    env:
+        MPI_IMPL: ${{ matrix.mpi_impl }}
+        GA_PORT: ${{ matrix.ga_port }}
+        BLAS: ${{ matrix.blas }}
+        CXX: ${{ matrix.cxx }}
+        CC: ${{ matrix.cc }}
+        FC: ${{ matrix.fc }}
+    continue-on-error: ${{ matrix.experimental }}
+    steps: 
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 40
+      - name: Get Instruction
+        id: get-simd
+        run: |
+          curl -LJO https://raw.githubusercontent.com/nwchemgit/nwchem/322697785955f2a933a4ba097a1fe0f9be8d5366/travis/guess_simd.sh
+          chmod +x guess_simd.sh
+          echo "::set-output name=simd::$(./guess_simd.sh)"
+        shell: bash
+      - name: Cache install steps
+        id: gfcc-cache-install
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-install-steps
+        with:
+          path: |
+            ~/gfcc_cache
+          key: ${{ runner.os }}-${{ matrix.mpi_impl }}-${{ matrix.ga_port }}-${{ matrix.cc }}-${{ matrix.cxx }}-simd${{ steps.get-simd.outputs.simd }}-blas${{ matrix.blas }}-gfcc-v000
+
+      - name: install_packages
+        run: |
+          case "${{ matrix.os }}" in
+          ubuntu*|jessie|stretch|buster)
+          sudo apt-get update -q -y
+          if [[ "${{ matrix.mpi_impl }}" == "openmpi" ]] ; then mpi_bin="openmpi-bin" ; mpi_libdev="libopenmpi-dev" ;  fi
+          if [[ "${{ matrix.mpi_impl }}" == "mpich" ]] ; then mpi_bin="mpich" ; mpi_libdev="libmpich-dev" ;  fi
+          echo " mpi packages " "${mpi_bin}" "${mpi_libdev}" || true
+          sudo apt-get install -q -y cmake "${mpi_bin}" "${mpi_libdev}" gfortran curl rsync
+          if [[ "${{ matrix.blas }}" == "mkl" ]] ; then \
+          curl -LJO https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB ;  \
+          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB ; \
+          rm GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB  ; \
+          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list ; \
+          sudo add-apt-repository "deb https://apt.repos.intel.com/oneapi all main" ; \
+          sudo apt-get update ; \
+          sudo apt-get -y install intel-oneapi-mkl-devel ; \
+          fi
+          ;;
+          macos*)
+          HOMEBREW_NO_INSTALL_CLEANUP=1  HOMEBREW_NO_AUTO_UPDATE=1 brew install "$MPI_IMPL" cmake wget autoconf automake ||true
+          #hack to fix Github actions mpif90
+          ln -sf /usr/local/bin/$FC /usr/local/bin/gfortran
+          ;;
+          esac
+          curl -LJO https://github.com/Kitware/CMake/releases/download/v3.18.4/cmake-3.18.4-`uname -s`-x86_64.tar.gz
+          tar xzf cmake-3.18.4-`uname -s`-x86_64.tar.gz
+          export PATH=`pwd`/cmake-3.18.4-`uname -s`-x86_64/bin:$PATH
+      - name: before_compile
+        if: steps.gfcc-cache-install.outputs.cache-hit == 'true'
+        run: |
+          export GFCC_SRC=$GITHUB_WORKSPACE
+          export GFCC_INSTALL_PATH=$GITHUB_WORKSPACE/gfcc_install
+          pwd
+          ls -lart
+          mkdir -p ${GFCC_INSTALL_PATH} ~/gfcc_cache || true
+          rsync -av  ~/gfcc_cache/* ${GFCC_INSTALL_PATH}/.
+          ls -lrt ${GFCC_INSTALL_PATH} || true
+      - name: compile gfcc
+        id: compile_gfcc
+        if: ${{ success() }}
+        run: |
+          export GFCC_SRC=$GITHUB_WORKSPACE
+          export GFCC_INSTALL_PATH=$GITHUB_WORKSPACE/gfcc_install
+          export PATH=`pwd`/cmake-3.18.4-`uname -s`-x86_64/bin:$PATH
+          mpicxx -show || true
+          cd ${GFCC_SRC}/contrib/TAMM 
+          mkdir build && cd build
+          if [[ "${{ matrix.blas }}" == "mkl" ]] ; then \
+          EXTRACMAKEOPT=" -DLINALG_VENDOR=IntelMKL -DLINALG_PREFIX=/opt/intel/oneapi/mkl/latest " ; \
+          export MKLROOT=/opt/intel/oneapi/mkl/latest ; \
+          export LD_LIBRARY_PATH=/opt/intel/oneapi/mkl/latest/lib/intel64:$LD_LIBRARY_PATH ; \
+          export PATH=/opt/intel/oneapi/mkl/latest/bin/intel64:$PATH ; \
+          fi
+          cmake -DCMAKE_INSTALL_PREFIX=${GFCC_INSTALL_PATH} -DGA_RUNTIME=${GA_PORT} \
+          ${EXTRACMAKEOPT} ..
+          make -j3
+          make install
+          cd ${GFCC_SRC}
+          mkdir build && cd build
+          cmake -DCMAKE_INSTALL_PREFIX=${GFCC_INSTALL_PATH} ..
+          make -j3
+          make install
+          mkdir -p  ~/gfcc_cache || true
+          rsync -av --exclude="*gfcc*" --exclude="*tamm*" ${GFCC_INSTALL_PATH}/* ~/gfcc_cache/.
+      - name: after_failure
+        if: ${{ failure() }}
+        run: |
+          pwd
+          ls -lart
+          find . -name config.log -exec cat {} ";" || true
+          echo '***** CMakeOutput.log *****'
+          find . -name CMakeOutput.log -exec cat {} ";" || true
+          echo '***** CMakeError.log ******'
+          find . -name CMakeError.log  -exec cat {} ";" || true
+      - name: qa test
+        id: qa_test
+        if: steps.compile_gfcc.conclusion == 'success'
+        run: |
+          export GFCC_SRC=$GITHUB_WORKSPACE
+          export GFCC_INSTALL_PATH=$GITHUB_WORKSPACE/gfcc_install
+          cd $GFCC_SRC/build
+          export OMP_NUM_THREADS=1
+          if [[ "${{ matrix.mpi_impl }}" == "openmpi" ]] ; then MAYBE_OVERSUBSCRIBE=-oversubscribe ;  fi
+          mpi_nprocs=3
+          if [[ "${{ matrix.ga_port }}" == "MPI_2SIDED" ]]  ; then mpi_nprocs=1 ;  fi
+          mpirun -n $mpi_nprocs ${MAYBE_OVERSUBSCRIBE} ./test_stage/$GFCC_INSTALL_PATH/methods/GF_CCSD ../tests/co.json
+          ls -lart ||true
+          python3 $GFCC_SRC/ci/scripts/compare_results.py $GFCC_SRC/ci/reference_output co.cc-pvdz_files/rhf/
+          echo "exit code is " $?

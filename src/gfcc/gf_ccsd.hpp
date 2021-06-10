@@ -1,7 +1,7 @@
 #ifndef GFCCSD_HPP_
 #define GFCCSD_HPP_
 
-#include "contrib/cd_ccsd_common.hpp"
+#include "contrib/cd_ccsd_os_ann.hpp"
 #include "gf_guess.hpp"
 #include "gfccsd_ip.hpp"
 #include <algorithm>
@@ -276,17 +276,17 @@ void gfccsd_driver_ip_a(ExecutionContext& gec, ExecutionContext& sub_ec, MPI_Com
     };
 
     gsch.allocate(DEArr_IP).execute();
-    // if(subcomm != MPI_COMM_NULL){
-    //     Scheduler sub_sch{sub_ec};
-        gsch(DEArr_IP() = 0).execute();        
-        block_for(gec, DEArr_IP(), DEArr_lambda);
-        gsch      
+    if(subcomm != MPI_COMM_NULL){
+        Scheduler sub_sch{sub_ec};
+        sub_sch(DEArr_IP() = 0).execute();        
+        block_for(sub_ec, DEArr_IP(), DEArr_lambda);
+        sub_sch      
           (dtmp_aaa() = 0)
           (dtmp_bab() = 0)
           (dtmp_aaa(p1_va,h1_oa,h2_oa) = DEArr_IP(p1_va,h1_oa,h2_oa))
           (dtmp_bab(p1_vb,h1_oa,h2_ob) = DEArr_IP(p1_vb,h1_oa,h2_ob))
           .execute();
-    // }
+    }
     gec.pg().barrier();
     gsch.deallocate(DEArr_IP).execute();
     write_to_disk(dtmp_aaa,dtmp_aaa_file);
@@ -843,6 +843,7 @@ void gfccsd_main_driver(std::string filename) {
                     = hartree_fock_driver<T>(ec,filename);
 
     int nsranks = sys_data.nbf/15;
+    if(nsranks < 1) nsranks=1;
     int ga_cnn = GA_Cluster_nnodes();
     if(nsranks>ga_cnn) nsranks=ga_cnn;
     nsranks = nsranks * GA_Cluster_nprocs(0);
@@ -863,10 +864,15 @@ void gfccsd_main_driver(std::string filename) {
         sub_pg = ProcGroup::create_coll(subcomm);
         sub_ec = new ExecutionContext(sub_pg, DistributionKind::nw, MemoryManagerKind::ga);
     }
+    EXPECTS(subcomm != MPI_COMM_NULL);
 
     Scheduler sub_sch{*sub_ec};
 
-    CCSDOptions ccsd_options = sys_data.options_map.ccsd_options;
+    //force writet on
+    sys_data.options_map.ccsd_options.writet = true;
+    sys_data.options_map.ccsd_options.computeTData = true;
+
+    CCSDOptions& ccsd_options = sys_data.options_map.ccsd_options;
     debug = ccsd_options.debug;
     if(rank == 0) ccsd_options.print();
 
@@ -875,7 +881,7 @@ void gfccsd_main_driver(std::string filename) {
     auto [MO,total_orbitals] = setupMOIS(sys_data);
 
     std::string out_fp = sys_data.output_file_prefix+"."+ccsd_options.basis;
-    std::string files_dir = out_fp+"_files";
+    std::string files_dir = out_fp+"_files/"+sys_data.options_map.scf_options.scf_type;
     std::string files_prefix = /*out_fp;*/ files_dir+"/"+out_fp;
     std::string f1file = files_prefix+".f1_mo";
     std::string t1file = files_prefix+".t1amp";
@@ -883,8 +889,8 @@ void gfccsd_main_driver(std::string filename) {
     std::string v2file = files_prefix+".cholv2";
     std::string cholfile = files_prefix+".cholcount";
     std::string ccsdstatus = files_prefix+".ccsdstatus";
-    // std::string outputfile = out_fp+".gfcc.profile";
-    // ofs_profile.open(outputfile, std::ios::out);    
+
+    const bool is_rhf = (sys_data.scf_type == sys_data.SCFType::rhf);
 
     bool ccsd_restart = ccsd_options.readt || 
         ( (fs::exists(t1file) && fs::exists(t2file)     
@@ -896,10 +902,20 @@ void gfccsd_main_driver(std::string filename) {
                                 ccsd_restart, cholfile);
     free_tensors(lcao);
 
+    // if(ccsd_options.writev) ccsd_options.writet = true;
+
     TiledIndexSpace N = MO("all");
 
-    auto [p_evl_sorted,d_t1,d_t2,d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s] 
-            = setupTensors(ec,MO,d_f1,ccsd_options.ndiis,ccsd_restart && fs::exists(ccsdstatus) && scf_conv);
+    std::vector<T> p_evl_sorted;
+    Tensor<T> d_r1, d_r2, d_t1, d_t2;
+    std::vector<Tensor<T>> d_r1s, d_r2s, d_t1s, d_t2s;
+
+    if(is_rhf) 
+        std::tie(p_evl_sorted,d_t1,d_t2,d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s)
+                = setupTensors_cs(ec,MO,d_f1,ccsd_options.ndiis,ccsd_restart && fs::exists(ccsdstatus) && scf_conv);
+    else
+        std::tie(p_evl_sorted,d_t1,d_t2,d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s)
+                = setupTensors(ec,MO,d_f1,ccsd_options.ndiis,ccsd_restart && fs::exists(ccsdstatus) && scf_conv);
 
     if(ccsd_restart) {
         read_from_disk(d_f1,f1file);
@@ -937,7 +953,9 @@ void gfccsd_main_driver(std::string filename) {
 
     auto cc_t1 = std::chrono::high_resolution_clock::now();
 
+    ExecutionHW ex_hw = ExecutionHW::CPU;
     #ifdef USE_TALSH
+    ex_hw = ExecutionHW::GPU;
     const bool has_gpu = ec.has_gpu();
     TALSH talsh_instance;
     if(has_gpu) talsh_instance.initialize(ec.gpu_devid(),rank.value());
@@ -945,31 +963,77 @@ void gfccsd_main_driver(std::string filename) {
 
     ccsd_restart = ccsd_restart && fs::exists(ccsdstatus) && scf_conv;
 
+    // std::string fullV2file = files_prefix+".fullV2";
+    // t1file = files_prefix+".fullT1amp";
+    // t2file = files_prefix+".fullT2amp";
+
+    bool  computeTData = true;
+    // if(ccsd_options.writev)
+    //     computeTData = computeTData && !fs::exists(fullV2file)
+    //             && !fs::exists(t1file) && !fs::exists(t2file);
+
+    if(computeTData && is_rhf) 
+      setup_full_t1t2(ec,MO,dt1_full,dt2_full);
+
+
     double residual=0, corr_energy=0;
-    if(ccsd_restart){
-      
-      if(subcomm != MPI_COMM_NULL){
-          std::tie(residual, corr_energy) = cd_ccsd_driver<T>(
-            sys_data, *sub_ec, MO, CI, d_t1, d_t2, d_f1, 
-            d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
-            p_evl_sorted, 
-            cholVpr, ccsd_restart, files_prefix);
+
+    if(is_rhf) {
+      if(ccsd_restart) {
+          if(subcomm != MPI_COMM_NULL) {
+              const int ppn = GA_Cluster_nprocs(0);
+              if(rank==0) std::cout << "Executing with " << nsranks << " ranks (" << nsranks/ppn << " nodes)" << std::endl; 
+              std::tie(residual, corr_energy) = cd_ccsd_cs_driver<T>(
+                      sys_data, *sub_ec, MO, CI, d_t1, d_t2, d_f1, 
+                      d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
+                      p_evl_sorted, 
+                      cholVpr, ccsd_restart, files_prefix,
+                      computeTData);
+          }
+          ec.pg().barrier();
       }
-      else{
-        std::tie(residual, corr_energy) = cd_ccsd_driver<T>(
-              sys_data, ec, MO, CI, d_t1, d_t2, d_f1, 
-              d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
-              p_evl_sorted, 
-              cholVpr, ccsd_restart, files_prefix);
-      }      
-      ec.pg().barrier();
+      else {
+          std::tie(residual, corr_energy) = cd_ccsd_cs_driver<T>(
+                  sys_data, ec, MO, CI, d_t1, d_t2, d_f1, 
+                  d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
+                  p_evl_sorted, 
+                  cholVpr, ccsd_restart, files_prefix,
+                  computeTData);
+          }      
     }
-    else{
-      std::tie(residual, corr_energy) = cd_ccsd_driver<T>(
-            sys_data, ec, MO, CI, d_t1, d_t2, d_f1, 
-            d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
-            p_evl_sorted, 
-            cholVpr, ccsd_restart, files_prefix);
+    else {
+      if(ccsd_restart) {
+          if(subcomm != MPI_COMM_NULL) {
+              const int ppn = GA_Cluster_nprocs(0);
+              if(rank==0) std::cout << "Executing with " << nsranks << " ranks (" << nsranks/ppn << " nodes)" << std::endl; 
+              std::tie(residual, corr_energy) = cd_ccsd_os_driver<T>(
+                      sys_data, *sub_ec, MO, CI, d_t1, d_t2, d_f1, 
+                      d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
+                      p_evl_sorted, 
+                      cholVpr, ccsd_restart, files_prefix,
+                      computeTData);
+          }
+          ec.pg().barrier();
+      }
+      else {
+          std::tie(residual, corr_energy) = cd_ccsd_os_driver<T>(
+                  sys_data, ec, MO, CI, d_t1, d_t2, d_f1, 
+                  d_r1,d_r2, d_r1s, d_r2s, d_t1s, d_t2s, 
+                  p_evl_sorted, 
+                  cholVpr, ccsd_restart, files_prefix,
+                  computeTData);
+          }
+    }
+
+    if(computeTData && is_rhf) {
+        // if(ccsd_options.writev) {
+        //     write_to_disk(dt1_full,t1file);
+        //     write_to_disk(dt2_full,t2file); 
+        //     free_tensors(dt1_full, dt2_full);
+        // }
+        free_tensors(d_t1, d_t2); //free t1_aa, t2_abab
+        d_t1 = dt1_full; //GFCC uses full T1,T2
+        d_t2 = dt2_full; //GFCC uses full T1,T2
     }
 
     ccsd_stats(ec, hf_energy,residual,corr_energy,ccsd_options.threshold);
@@ -988,7 +1052,21 @@ void gfccsd_main_driver(std::string filename) {
     auto cc_t2 = std::chrono::high_resolution_clock::now();
     double ccsd_time = 
         std::chrono::duration_cast<std::chrono::duration<double>>((cc_t2 - cc_t1)).count();
-    if(rank == 0) std::cout << std::endl << "Time taken for Cholesky CCSD: " << ccsd_time << " secs" << std::endl;
+    if(rank == 0) { 
+      if(is_rhf)
+        std::cout << std::endl << "Time taken for Closed Shell Cholesky CCSD: " << ccsd_time << " secs" << std::endl;
+      else
+        std::cout << std::endl << "Time taken for Open Shell Cholesky CCSD: " << ccsd_time << " secs" << std::endl;
+    }
+
+    double printtol=ccsd_options.printtol;
+    // if (rank == 0 && debug) {
+    //     std::cout << std::endl << "Threshold for printing amplitudes set to: " << printtol << std::endl;
+    //     std::cout << "T1 amplitudes" << std::endl;
+    //     print_max_above_threshold(d_t1,printtol);
+    //     std::cout << "T2 amplitudes" << std::endl;
+    //     print_max_above_threshold(d_t2,printtol);
+    // }
 
     if(!ccsd_restart) {
         free_tensors(d_r1,d_r2);
@@ -1026,7 +1104,7 @@ void gfccsd_main_driver(std::string filename) {
   gf_level_shift       = 0;
   gf_damping_factor    = ccsd_options.gf_damping_factor;
   gf_extrapolate_level = ccsd_options.gf_extrapolate_level;
-  gf_analyze_level = ccsd_options.gf_analyze_level;
+  gf_analyze_level     = ccsd_options.gf_analyze_level;
   gf_analyze_num_omega = ccsd_options.gf_analyze_num_omega;
   omega_npts_ip        = (omega_max_ip - omega_min_ip) / omega_delta + 1;
   lomega_npts_ip       = (lomega_max_ip - lomega_min_ip) / omega_delta_e + 1;
@@ -1090,7 +1168,7 @@ void gfccsd_main_driver(std::string filename) {
     }
     if (rank==0) cout << "Freq. space (before doing MOR): " << omega_space_ip << endl;
   }
-  
+
     auto restart_time_end = std::chrono::high_resolution_clock::now();
     double total_restart_time = 
         std::chrono::duration_cast<std::chrono::duration<double>>((restart_time_end - restart_time_start)).count();
@@ -1641,12 +1719,12 @@ void gfccsd_main_driver(std::string filename) {
             
             ivec_start = prev_qr_rank;
   
-            // if(subcomm != MPI_COMM_NULL){
-              sch
+            if(subcomm != MPI_COMM_NULL){
+              sub_sch
                 (q1_tamm_a(h1_oa,op1) = q1_prev_a(h1_oa,op1))
                 (q2_tamm_aaa(p1_va,h1_oa,h2_oa,op1) = q2_prev_aaa(p1_va,h1_oa,h2_oa,op1))
                 (q2_tamm_bab(p1_vb,h1_oa,h2_ob,op1) = q2_prev_bab(p1_vb,h1_oa,h2_ob,op1)).execute();
-            // }                
+            }          
             sch.deallocate(q1_prev_a,q2_prev_aaa,q2_prev_bab).execute();           
           }     
   
@@ -1751,13 +1829,13 @@ void gfccsd_main_driver(std::string filename) {
               TiledIndexSpace tsc{otis, range(ivec,ivec+1)};
               auto [sc] = tsc.labels<1>("all");
   
-              // if(subcomm != MPI_COMM_NULL){
-                sch
+              if(subcomm != MPI_COMM_NULL){
+                sub_sch
                 (q1_tamm_a(h1_oa,sc) = cnewsc * q1_tmp_a(h1_oa))
                 (q2_tamm_aaa(p2_va,h1_oa,h2_oa,sc) = cnewsc * q2_tmp_aaa(p2_va,h1_oa,h2_oa))
                 (q2_tamm_bab(p2_vb,h1_oa,h2_ob,sc) = cnewsc * q2_tmp_bab(p2_vb,h1_oa,h2_ob))
                 .execute();
-              // }
+              }
               ec.pg().barrier();
   
               auto cc_gs = std::chrono::high_resolution_clock::now();
@@ -2076,7 +2154,7 @@ void gfccsd_main_driver(std::string filename) {
 
       } //end while
       //end of alpha
-    }   
+    }
 
     sch.deallocate(cholVpr,d_f1,d_t1,d_t2).execute();
 

@@ -1,26 +1,26 @@
 cmake_minimum_required(VERSION ${CMAKE_VERSION})
-project(gfcc VERSION ${PROJECT_VERSION} LANGUAGES CXX)
+project(GFCC VERSION ${PROJECT_VERSION} LANGUAGES CXX)
 include(TargetMacros) #For nwchemex_add_library
 
 #Add the current directory's sources to the list
-set(gfcc_SRCS gf_ccsd.cpp)
+set(GFCC_SRCS gf_ccsd.cpp)
 
 #Add the current directory's header files to the list
-set(gfcc_INCLUDES
+set(GFCC_INCLUDES
     gf_ccsd.hpp  gf_guess.hpp      gfccsd_ip.hpp
     contrib/ccsd_util.hpp          contrib/cd_svd_ga.hpp  
-    contrib/cd_ccsd_common.hpp     contrib/diis.hpp       
+    contrib/cd_ccsd_os_ann.hpp     contrib/diis.hpp       
     contrib/hf_common.hpp          contrib/scf_guess.hpp
     contrib/hartree_fock_tamm.hpp  contrib/hf_tamm_common.hpp  
     contrib/json_data.hpp          contrib/misc.hpp  
-    contrib/cd_ccsd_common_cs.hpp  contrib/two_index_transform.hpp
+    contrib/cd_ccsd_os_ann.hpp  contrib/two_index_transform.hpp
     contrib/input_parser.hpp       contrib/linalg.hpp contrib/molden.hpp
    )
 
-set(gfcc_DEFINITIONS )
-set(gfcc_LFLAGS )
+set(GFCC_CFLAGS )
+set(GFCC_LFLAGS )
 
-cmsb_add_library(gfcc gfcc_SRCS gfcc_INCLUDES gfcc_DEFINTIONS gfcc_LFLAGS)
+cmsb_add_library(gfcc GFCC_SRCS GFCC_INCLUDES GFCC_CFLAGS GFCC_LFLAGS)
 target_include_directories(gfcc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 target_include_directories(gfcc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../utils/external)
 
