@@ -23,9 +23,9 @@ namespace fs = std::filesystem;
 
 
 /******* Ferdous's addition codes*********/
-typedef NODE_T int;
-typedef EDGE_T int;
-typedef VAL_T double;
+typedef int NODE_T;
+typedef int EDGE_T;
+typedef double VAL_T;
 
 //load data struct
 struct Load
@@ -118,9 +118,9 @@ void simpleLoadBal(Loads &L, NODE_T nMachine )
     std::vector<NODE_T> bV(nMachine);
     std::vector<NODE_T> cV(nMachine);
 
-    NODE_T b_prime = nRow/nCol;
+    NODE_T b_prime = L.nLoads/nMachine;
     cout<<b_prime<<endl;
-    NODE_T remainder = nRow % nCol;
+    NODE_T remainder = L.nLoads%nMachine;
 
     for(NODE_T i=0;i<nMachine;i++)
     {
@@ -177,7 +177,7 @@ void createTaskMap(Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::Row
    {
         auto u = L.loadList[i].s1;
         auto v = L.loadList[i].s2;
-        taskmap[u][v] = L.loadList[i].rank;
+        taskmap(u,v) = L.loadList[i].rank;
    }
 
 }
@@ -754,9 +754,11 @@ std::tuple<SystemData, double, libint2::BasisSet, std::vector<size_t>,
         Loads dummyLoads;
         /***start ferdous code***/ 
         readLoads(fileName, dummyLoads);
+        NODE_T nMachine = 10;
+
         simpleLoadBal(dummyLoads,nMachine);
         Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> taskmap;
-        int tmdim = max(dummyLoads.maxS1,dummyLoads.maxS2);
+        int tmdim = std::max(dummyLoads.maxS1,dummyLoads.maxS2);
         taskmap.resize(tmdim,tmdim);
         for(int i=0;i<tmdim;i++)
             for(int j=0;j<tmdim;j++) {
